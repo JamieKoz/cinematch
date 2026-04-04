@@ -12,6 +12,7 @@ export interface OnboardingAnswers {
   runtime?: RuntimeBucket | "any";
   language?: string | "any";
   releaseWindow?: "any" | "2020s" | "2010s" | "2000s" | "pre-2000";
+  customYearRange?: { min: number; max: number } | null;
   familiarity?: "any" | "popular" | "hidden-gems";
   providers?: string[];
   hardExclusions?: string[];
@@ -31,6 +32,8 @@ export interface Title {
   releaseYear: number;
   posterPath?: string | null;
   overview: string;
+  rating?: number;
+  cast?: string[];
 }
 
 export interface TasteProfile {

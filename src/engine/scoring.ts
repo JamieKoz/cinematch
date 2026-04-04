@@ -41,6 +41,13 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
     if (answers.releaseWindow === "pre-2000" && !pre2000) score -= 1.5;
   }
 
+  if (answers.customYearRange) {
+    const { min, max } = answers.customYearRange;
+    if (title.releaseYear < min || title.releaseYear > max) {
+      return -9999;
+    }
+  }
+
   if (answers.mood && title.moods.includes(answers.mood)) {
     score += 3;
   }

@@ -30,3 +30,45 @@ body {
   transform: scale(1.18);
   filter: saturate(0.9) contrast(1.02);
 }
+
+.dual-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.dual-range::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.dual-range::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+
+.dual-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(167, 139, 250, 1);
+  box-shadow: 0 0 0 4px rgba(30, 27, 75, 0.35);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dual-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(167, 139, 250, 1);
+  box-shadow: 0 0 0 4px rgba(30, 27, 75, 0.35);
+  pointer-events: auto;
+  cursor: pointer;
+}

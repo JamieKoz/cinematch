@@ -14,6 +14,8 @@ const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
 const EXCLUSION_OPTIONS = ["horror", "crime", "romance", "drama", "action", "thriller", "comedy"];
 const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;
 const FAMILIARITY_OPTIONS = ["any", "popular", "hidden-gems"] as const;
+const YEAR_MIN = 1900;
+const YEAR_MAX = new Date().getFullYear();
 
 type QuickPreset = {
   id: string;
@@ -61,10 +63,12 @@ export function App() {
   });
 
   const [isBuildingDeck, setIsBuildingDeck] = useState(false);
-  const [roundMessage, setRoundMessage] = useState<string>("");
   const [catalog, setCatalog] = useState<Title[]>(MOCK_TITLES);
+  const [lastSwipeSnapshot, setLastSwipeSnapshot] = useState<{ session: SessionState; profile: ReturnType<typeof createDefaultProfile> } | null>(null);
   const [swipeDeltaX, setSwipeDeltaX] = useState(0);
   const [isDraggingCard, setIsDraggingCard] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [showdownDetailsTitle, setShowdownDetailsTitle] = useState<Title | null>(null);
   const swipeStartXRef = useRef<number | null>(null);
   const SWIPE_TRIGGER_PX = 110;
 
@@ -73,6 +77,7 @@ export function App() {
   }, [catalog]);
 
   const currentTitle = session.phase === "swipe" ? titlesById.get(session.deck[session.deckCursor]) : undefined;
+  const nextSwipeTitle = session.phase === "swipe" ? titlesById.get(session.deck[session.deckCursor + 1]) : undefined;
   const showdownPair = session.phase === "showdown" ? nextPair(session.showdownQueue) : null;
   const showdownLeft = showdownPair ? titlesById.get(showdownPair[0]) : undefined;
   const showdownRight = showdownPair ? titlesById.get(showdownPair[1]) : undefined;
@@ -82,6 +87,13 @@ export function App() {
   const selectedQuickPreset = QUICK_PRESETS.find((preset) => preset.id === session.answers.quickModeId);
   const passOverlayOpacity = Math.min(1, Math.max(0, -swipeDeltaX / SWIPE_TRIGGER_PX));
   const keepOverlayOpacity = Math.min(1, Math.max(0, swipeDeltaX / SWIPE_TRIGGER_PX));
+  const customYearRange = session.answers.customYearRange;
+  const customYearStartPct = customYearRange
+    ? ((customYearRange.min - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100
+    : 0;
+  const customYearEndPct = customYearRange
+    ? ((customYearRange.max - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100
+    : 100;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -104,9 +116,21 @@ export function App() {
     swipeStartXRef.current = null;
   }, [currentTitle?.id]);
 
+  useEffect(() => {
+    if (session.phase !== "showdown") {
+      setShowdownDetailsTitle(null);
+    }
+  }, [session.phase]);
+
+  useEffect(() => {
+    if (!shareFeedback) return;
+    const timer = window.setTimeout(() => setShareFeedback(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [shareFeedback]);
+
   async function startSwipeRound() {
     setIsBuildingDeck(true);
-    setRoundMessage("");
+    setLastSwipeSnapshot(null);
     saveLastAnswers({ ...session.answers, quickModeId: undefined });
 
     const aiEnabled = Boolean(import.meta.env.VITE_OPENAI_API_KEY);
@@ -153,8 +177,6 @@ export function App() {
     const ids = deckTitles.map((title) => title.id);
     const fallback = buildDeck(catalog, session.answers, profile);
     const deck = ids.length ? ids : fallback;
-    const mode = aiEnabled ? "AI suggestions" : "local ranking";
-    setRoundMessage(`Prepared ${deck.length} picks via ${mode}${tmdbEnabled ? " + TMDB enrichment" : ""}.`);
 
     setSession((prev) => ({
       ...prev,
@@ -215,8 +237,30 @@ export function App() {
     });
   }
 
+  function toggleCustomYearRange(): void {
+    if (session.answers.customYearRange) {
+      updateAnswers({ customYearRange: null });
+      return;
+    }
+    updateAnswers({
+      customYearRange: { min: 2000, max: YEAR_MAX }
+    });
+  }
+
+  function updateCustomYearRange(next: Partial<{ min: number; max: number }>): void {
+    const current = session.answers.customYearRange ?? { min: 2000, max: YEAR_MAX };
+    const merged = { ...current, ...next };
+    const min = Math.max(YEAR_MIN, Math.min(merged.min, merged.max));
+    const max = Math.min(YEAR_MAX, Math.max(merged.max, min));
+    updateAnswers({ customYearRange: { min, max } });
+  }
+
   function handleSwipe(action: "keep" | "pass") {
     if (!currentTitle) return;
+    setLastSwipeSnapshot({
+      session: cloneSession(session),
+      profile: cloneProfile(profile)
+    });
 
     if (action === "keep") {
       setProfile((prev) => applyKeepSignal(prev, currentTitle));
@@ -271,6 +315,54 @@ export function App() {
         deckCursor: nextCursor
       };
     });
+  }
+
+  function handleUndoSwipe() {
+    if (!lastSwipeSnapshot) return;
+    setSession(lastSwipeSnapshot.session);
+    setProfile(lastSwipeSnapshot.profile);
+    setLastSwipeSnapshot(null);
+    setSwipeDeltaX(0);
+    setIsDraggingCard(false);
+    swipeStartXRef.current = null;
+  }
+
+  async function handleShareCurrentTitle() {
+    if (!currentTitle) return;
+    const shareText = `${currentTitle.name} (${currentTitle.releaseYear})`;
+    const payload = {
+      title: "CineMatch pick",
+      text: `Check out this pick: ${shareText}`
+    };
+
+    try {
+      if (typeof navigator !== "undefined" && "share" in navigator) {
+        await navigator.share(payload);
+        setShareFeedback("Shared");
+        return;
+      }
+    } catch {
+      // fall through to clipboard
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(payload.text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = payload.text;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setShareFeedback("Copied");
+    } catch {
+      setShareFeedback("Unable to share");
+    }
   }
 
   function onSwipePointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -337,7 +429,6 @@ export function App() {
   function finalizeDecision() {
     if (!winner) return;
     setProfile((prev) => applyDecisionSignal(prev, winner));
-    setRoundMessage("Nice. Your preferences were updated for smarter next picks.");
   }
 
   function resetAndStartNewRound() {
@@ -354,7 +445,6 @@ export function App() {
   function handleResetPersonalization() {
     resetPersonalization();
     setProfile(createDefaultProfile());
-    setRoundMessage("Personalization reset.");
   }
 
   return (
@@ -374,36 +464,48 @@ export function App() {
       </div>
       <div className="pointer-events-none fixed inset-0 z-10 bg-gradient-to-b from-black/40 via-black/55 to-black/80" />
 
-      <main className="relative z-20 mx-auto max-w-5xl px-4 py-6 text-zinc-100 md:py-10">
-        <header className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">CineMatch</h1>
-            <p className="text-sm text-zinc-300 md:text-base">Find your match for your next film.</p>
+      <main className="relative z-20 mx-auto max-w-5xl px-3 py-3 text-zinc-100 sm:px-4 sm:py-5 md:py-10">
+        <header className="mb-3">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">CineMatch</h1>
+            <details className="group relative">
+              <summary className="list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70">
+                <span className="sr-only">Settings</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10.325 4.317a1.724 1.724 0 0 1 3.35 0 1.724 1.724 0 0 0 2.573 1.066 1.724 1.724 0 0 1 2.49 2.49 1.724 1.724 0 0 0 1.065 2.573 1.724 1.724 0 0 1 0 3.35 1.724 1.724 0 0 0-1.066 2.573 1.724 1.724 0 0 1-2.49 2.49 1.724 1.724 0 0 0-2.573 1.065 1.724 1.724 0 0 1-3.35 0 1.724 1.724 0 0 0-2.573-1.066 1.724 1.724 0 0 1-2.49-2.49 1.724 1.724 0 0 0-1.065-2.573 1.724 1.724 0 0 1 0-3.35 1.724 1.724 0 0 0 1.066-2.573 1.724 1.724 0 0 1 2.49-2.49 1.724 1.724 0 0 0 2.573-1.065Z"
+                  />
+                  <circle cx="12" cy="12" r="3.25" />
+                </svg>
+              </summary>
+              <div className="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-white/20 bg-zinc-900/90 p-2 shadow-2xl backdrop-blur-xl">
+                <button
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80"
+                  onClick={handleResetPersonalization}
+                >
+                  Clear cache
+                </button>
+              </div>
+            </details>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <label className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-zinc-900/55 px-3 py-1.5 text-xs text-zinc-100 backdrop-blur-md md:text-sm">
-              <input
-                className="h-4 w-4 rounded border-white/30 bg-zinc-900/60 accent-violet-500"
-                type="checkbox"
-                checked={session.answers.usePersonalization}
-                onChange={(event) => updateAnswers({ usePersonalization: event.target.checked })}
-              />
-              Use my past preferences
-            </label>
-            <button
-              className="rounded-full border border-white/30 bg-zinc-900/60 px-4 py-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70"
-              onClick={handleResetPersonalization}
-            >
-              Reset Personalization
-            </button>
+          <div>
+            <p className="text-sm text-zinc-300 md:text-base">Find the match for your next film.</p>
           </div>
         </header>
 
-        {roundMessage ? <p className="mb-3 text-sm text-emerald-300">{roundMessage}</p> : null}
-
         {session.phase === "questions" && (
           <>
-            <section className="rounded-3xl border border-white/25 bg-gradient-to-br from-zinc-900/20 to-zinc-800/10 p-5 shadow-2xl backdrop-blur-xl">
+            <section className="p-5 shadow-2xl">
 
               {!hasSelectedQuickMode ? (
                 <div className="mt-4 grid gap-2">
@@ -421,8 +523,8 @@ export function App() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-white/15 bg-zinc-900/40 px-3 py-2">
-                  <p className="text-xs text-zinc-300">
+                <div className="mt-4 flex flex-col items-start gap-2 rounded-xl sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-zinc-300 sm:text-sm">
                     Selected quick mode: <span className="font-medium text-zinc-100">{selectedQuickPreset?.label ?? "Custom"}</span>
                   </p>
                   <button
@@ -458,7 +560,7 @@ export function App() {
                   <div className="mt-4 grid gap-2">
                     <label className="text-sm text-zinc-200">Type</label>
                     <select
-                      className="w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
+                      className="w-full sm:w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
                       value={session.answers.preferredType ?? "either"}
                       onChange={(event) => updateAnswers({ preferredType: event.target.value as OnboardingAnswers["preferredType"] })}
                     >
@@ -471,7 +573,7 @@ export function App() {
                   <div className="mt-4 grid gap-2">
                     <label className="text-sm text-zinc-200">Runtime</label>
                     <select
-                      className="w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
+                      className="w-full sm:w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
                       value={session.answers.runtime ?? "any"}
                       onChange={(event) => updateAnswers({ runtime: event.target.value as OnboardingAnswers["runtime"] })}
                     >
@@ -495,7 +597,7 @@ export function App() {
                                 ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
                                 : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
                             }
-                            onClick={() => updateAnswers({ releaseWindow: window })}
+                            onClick={() => updateAnswers({ releaseWindow: window, customYearRange: null })}
                           >
                             {window === "any"
                               ? "Any"
@@ -509,7 +611,55 @@ export function App() {
                           </button>
                         );
                       })}
+                      <button
+                        className={
+                          session.answers.customYearRange
+                            ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
+                            : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
+                        }
+                        onClick={toggleCustomYearRange}
+                      >
+                        Custom range
+                      </button>
                     </div>
+                    {customYearRange ? (
+                      <div className="mt-2 rounded-xl border border-white/20 bg-zinc-900/45 p-3">
+                        <p className="text-xs text-zinc-300">
+                          Year range: <span className="font-medium text-zinc-100">{customYearRange.min}</span> -{" "}
+                          <span className="font-medium text-zinc-100">{customYearRange.max}</span>
+                        </p>
+                        <div className="relative mt-3 h-8">
+                          <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-700/70" />
+                          <div
+                            className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-violet-400/80"
+                            style={{
+                              left: `${customYearStartPct}%`,
+                              right: `${100 - customYearEndPct}%`
+                            }}
+                          />
+                          <input
+                            className="dual-range dual-range-min absolute inset-0 w-full"
+                            type="range"
+                            min={YEAR_MIN}
+                            max={YEAR_MAX}
+                            value={customYearRange.min}
+                            onChange={(event) => updateCustomYearRange({ min: Number(event.target.value) })}
+                          />
+                          <input
+                            className="dual-range dual-range-max absolute inset-0 w-full"
+                            type="range"
+                            min={YEAR_MIN}
+                            max={YEAR_MAX}
+                            value={customYearRange.max}
+                            onChange={(event) => updateCustomYearRange({ max: Number(event.target.value) })}
+                          />
+                        </div>
+                        <div className="mt-1 flex justify-between text-[11px] text-zinc-400">
+                          <span>{YEAR_MIN}</span>
+                          <span>{YEAR_MAX}</span>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="mt-4 grid gap-2">
@@ -636,90 +786,127 @@ export function App() {
         {session.phase === "swipe" && currentTitle && (
           <section>
             <div className="">
-              <h2 className="text-xl font-semibold">Picks</h2>
               <p className="mt-2 text-sm text-zinc-300">
                 Card {session.deckCursor + 1} / {session.deck.length} - Shortlist: {session.shortlist.length}
               </p>
             </div>
 
-            <div
-              className={
-                isDraggingCard
-                  ? "relative mt-4 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/35 p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-none"
-                  : "relative mt-4 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/35 p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-transform duration-200 ease-out"
-              }
-              style={{
-                transform: `translateX(${swipeDeltaX}px) rotate(${swipeDeltaX * 0.06}deg)`
-              }}
-              onPointerDown={onSwipePointerDown}
-              onPointerMove={onSwipePointerMove}
-              onPointerUp={onSwipePointerEnd}
-              onPointerCancel={onSwipePointerEnd}
-            >
-              <div
-                className="pointer-events-none absolute inset-0 bg-rose-300/20 transition-opacity"
-                style={{ opacity: passOverlayOpacity * 0.75 }}
-              />
-              <div
-                className="pointer-events-none absolute inset-0 bg-emerald-300/20 transition-opacity"
-                style={{ opacity: keepOverlayOpacity * 0.75 }}
-              />
+            <div className="relative mt-3">
+              {nextSwipeTitle ? (
+                <div className="pointer-events-none absolute inset-0 z-0 translate-y-2 scale-[0.97] opacity-25">
+                  <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-900/25 p-2 sm:p-4 shadow-xl backdrop-blur-xl">
+                    <TitleCard title={nextSwipeTitle} noTopMargin compactMobile truncateOverview />
+                  </div>
+                </div>
+              ) : null}
 
-              <div className="relative">
+              <div
+                className={
+                  isDraggingCard
+                    ? "relative z-10 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/20 p-2 sm:p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-none"
+                    : "relative z-10 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/20 p-2 sm:p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-transform duration-200 ease-out"
+                }
+                style={{
+                  transform: `translateX(${swipeDeltaX}px) rotate(${swipeDeltaX * 0.06}deg)`
+                }}
+                onDragStart={(event) => event.preventDefault()}
+                onPointerDown={onSwipePointerDown}
+                onPointerMove={onSwipePointerMove}
+                onPointerUp={onSwipePointerEnd}
+                onPointerCancel={onSwipePointerEnd}
+              >
                 <div
-                  className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-rose-300/80 bg-rose-950/40 px-3 py-1 text-xs font-bold tracking-wider text-rose-200"
-                  style={{ opacity: passOverlayOpacity }}
-                >
-                  NOPE
-                </div>
+                  className="pointer-events-none absolute inset-0 bg-rose-300/20 transition-opacity"
+                  style={{ opacity: passOverlayOpacity * 0.75 }}
+                />
                 <div
-                  className="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border-2 border-emerald-300/80 bg-emerald-950/40 px-3 py-1 text-xs font-bold tracking-wider text-emerald-200"
-                  style={{ opacity: keepOverlayOpacity }}
-                >
-                  LIKE
-                </div>
-                <div className="">
-                  <TitleCard title={currentTitle} noTopMargin />
+                  className="pointer-events-none absolute inset-0 bg-emerald-300/20 transition-opacity"
+                  style={{ opacity: keepOverlayOpacity * 0.75 }}
+                />
+
+                <div className="relative">
+                  <div
+                    className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-rose-300/80 bg-rose-950/40 px-3 py-1 text-xs font-bold tracking-wider text-rose-200"
+                    style={{ opacity: passOverlayOpacity }}
+                  >
+                    NOPE
+                  </div>
+                  <div
+                    className="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border-2 border-emerald-300/80 bg-emerald-950/40 px-3 py-1 text-xs font-bold tracking-wider text-emerald-200"
+                    style={{ opacity: keepOverlayOpacity }}
+                  >
+                    LIKE
+                  </div>
+                  <div className="">
+                    <TitleCard title={currentTitle} noTopMargin compactMobile truncateOverview />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-center gap-10 rounded-2xl p-4">
+            <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-2xl p-1 sm:mt-4 sm:gap-3 sm:p-2">
               <button
-                aria-label="Pass"
-                className="grid h-20 w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-4xl text-rose-200 transition-colors hover:bg-rose-800/55"
-                onClick={() => handleSwipe("pass")}
+                aria-label="Undo"
+                className="justify-self-start grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition-colors hover:bg-zinc-800/60 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={handleUndoSwipe}
+                disabled={!lastSwipeSnapshot}
               >
-                ✕
+                ↺
               </button>
+              <div className="flex items-center justify-center gap-4 sm:gap-10">
+                <button
+                  aria-label="Pass"
+                  className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition-colors hover:bg-rose-800/55"
+                  onClick={() => handleSwipe("pass")}
+                >
+                  ✕
+                </button>
+                <button
+                  aria-label="Keep"
+                  className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition-colors hover:bg-emerald-800/60"
+                  onClick={() => handleSwipe("keep")}
+                >
+                  ♥
+                </button>
+              </div>
               <button
-                aria-label="Keep"
-                className="grid h-20 w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-4xl text-emerald-200 transition-colors hover:bg-emerald-800/60"
-                onClick={() => handleSwipe("keep")}
+                aria-label="Share"
+                className="justify-self-end grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition-colors hover:bg-zinc-800/60"
+                onClick={handleShareCurrentTitle}
               >
-                ♥
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  style={{ display: "block", opacity: 0.92 }}
+                >
+                  <path
+                    fill="#fff"
+                    d="M14 3l7 7-7 7v-4.1c-5.2 0-8.8 1.7-11 5.1.6-6 3.9-10 11-10.9V3z"
+                  />
+                </svg>
               </button>
             </div>
+            {shareFeedback ? <p className="mt-1 text-center text-xs text-zinc-300">{shareFeedback}</p> : null}
           </section>
         )}
 
         {session.phase === "showdown" && showdownLeft && showdownRight && (
           <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
             <h2 className="text-xl font-semibold">Final showdown</h2>
-            <p className="mt-2 text-sm text-zinc-300">Pick one. Repeat until we get your winner.</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <button
-                className="rounded-2xl border border-white/15 bg-zinc-900/40 p-0 text-left transition hover:border-white/35"
-                onClick={() => handleShowdownPick("left")}
-              >
-                <TitleCard title={showdownLeft} compact />
-              </button>
-              <button
-                className="rounded-2xl border border-white/15 bg-zinc-900/40 p-0 text-left transition hover:border-white/35"
-                onClick={() => handleShowdownPick("right")}
-              >
-                <TitleCard title={showdownRight} compact />
-              </button>
+            <p className="mt-2 text-sm text-zinc-300">Pick one. Use “Show more” for description and full details.</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <ShowdownChoiceCard
+                title={showdownLeft}
+                onPick={() => handleShowdownPick("left")}
+                onShowMore={() => setShowdownDetailsTitle(showdownLeft)}
+              />
+              <ShowdownChoiceCard
+                title={showdownRight}
+                onPick={() => handleShowdownPick("right")}
+                onShowMore={() => setShowdownDetailsTitle(showdownRight)}
+              />
             </div>
           </section>
         )}
@@ -745,6 +932,39 @@ export function App() {
             </div>
           </section>
         )}
+
+        {showdownDetailsTitle ? (
+          <div
+            className="fixed inset-0 z-40 grid place-items-center bg-black/70 px-4"
+            onClick={() => setShowdownDetailsTitle(null)}
+          >
+            <div
+              className="w-full max-w-lg rounded-2xl border border-white/20 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-semibold">
+                  {showdownDetailsTitle.name} ({showdownDetailsTitle.releaseYear})
+                </h3>
+                <button
+                  className="rounded-full border border-white/25 bg-zinc-800/70 px-2 py-1 text-sm transition hover:bg-zinc-700/80"
+                  onClick={() => setShowdownDetailsTitle(null)}
+                >
+                  Close
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-zinc-300">
+                {showdownDetailsTitle.type} {showdownDetailsTitle.runtimeMinutes}m
+                {typeof showdownDetailsTitle.rating === "number" ? ` - ${showdownDetailsTitle.rating.toFixed(1)}★` : ""}
+              </p>
+              <p className="mt-3 text-sm text-zinc-100">{showdownDetailsTitle.overview}</p>
+              <p className="mt-3 text-sm text-zinc-300">Genres: {showdownDetailsTitle.genres.join(", ")}</p>
+              {showdownDetailsTitle.cast?.length ? (
+                <p className="mt-1 text-sm text-zinc-300">Cast: {showdownDetailsTitle.cast.join(", ")}</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </main>
     </div>
   );
@@ -755,6 +975,7 @@ function deriveSmartDefaultsFromProfile(profile: ReturnType<typeof createDefault
     language: "en",
     providers: [],
     releaseWindow: "any",
+    customYearRange: null,
     familiarity: "any"
   };
 
@@ -786,6 +1007,32 @@ function topAffinityKey(affinity: Record<string, number>, minScore: number): str
   return bestKey;
 }
 
+function cloneSession(session: SessionState): SessionState {
+  return {
+    ...session,
+    answers: { ...session.answers },
+    deck: [...session.deck],
+    shortlist: [...session.shortlist],
+    passed: [...session.passed],
+    showdownQueue: [...session.showdownQueue]
+  };
+}
+
+function cloneProfile(profile: ReturnType<typeof createDefaultProfile>): ReturnType<typeof createDefaultProfile> {
+  return {
+    ...profile,
+    runtimeAffinity: { ...profile.runtimeAffinity },
+    moodAffinity: { ...profile.moodAffinity },
+    genreAffinity: { ...profile.genreAffinity },
+    typeAffinity: { ...profile.typeAffinity },
+    languageAffinity: { ...profile.languageAffinity },
+    providerAffinity: { ...profile.providerAffinity },
+    likedIds: [...profile.likedIds],
+    rejectedIds: [...profile.rejectedIds],
+    seenIds: [...profile.seenIds]
+  };
+}
+
 function mergeCatalog(existing: Title[], updates: Title[]): Title[] {
   const byId = new Map(existing.map((title) => [title.id, title]));
   for (const update of updates) {
@@ -804,37 +1051,115 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function TitleCard({ title, compact = false, noTopMargin = false }: { title: Title; compact?: boolean; noTopMargin?: boolean }) {
+function TitleCard({
+  title,
+  compact = false,
+  noTopMargin = false,
+  compactMobile = false,
+  truncateOverview = false
+}: {
+  title: Title;
+  compact?: boolean;
+  noTopMargin?: boolean;
+  compactMobile?: boolean;
+  truncateOverview?: boolean;
+}) {
   const poster = tmdbPosterUrl(title.posterPath);
+  const overviewStyle = truncateOverview
+    ? {
+      display: "-webkit-box",
+      WebkitLineClamp: 3,
+      WebkitBoxOrient: "vertical" as const,
+      overflow: "hidden"
+    }
+    : undefined;
   return (
     <article
       className={
         compact
           ? `${noTopMargin ? "" : "mt-4 "}rounded-2xl bg-zinc-900/20 p-3`
-          : `${noTopMargin ? "" : "mt-4 "}rounded-2xl bg-zinc-900/20 p-4`
+          : `${noTopMargin ? "" : "mt-4 "}rounded-2xl p-4`
       }
     >
       <div
         className={
           compact
             ? "mx-auto grid w-full max-w-[170px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-3xl font-semibold aspect-[2/3]"
-            : "mx-auto grid w-full max-w-[260px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-4xl font-semibold aspect-[2/3]"
+            : compactMobile
+              ? "mx-auto grid w-full max-w-[190px] sm:max-w-[240px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-3xl sm:text-4xl font-semibold aspect-[2/3]"
+              : "mx-auto grid w-full max-w-[260px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-4xl font-semibold aspect-[2/3]"
         }
       >
         {poster ? (
-          <img className="h-full w-full object-cover object-center" src={poster} alt={`${title.name} poster`} />
+          <img
+            className="h-full w-full object-cover object-center"
+            src={poster}
+            alt={`${title.name} poster`}
+            draggable={false}
+            onDragStart={(event) => event.preventDefault()}
+          />
         ) : (
           <span>{title.name.slice(0, 1)}</span>
         )}
       </div>
-      <div className="mt-3">
-        <h3 className="text-lg font-medium md:text-xl">{title.name}</h3>
-        <p className="mt-2 text-sm text-zinc-300">
-          {title.type} - {title.releaseYear} - {title.runtimeMinutes}m
+      <div className={compactMobile ? "mt-2" : "mt-3"}>
+        <h3 className={compactMobile ? "text-base font-medium sm:text-lg md:text-xl" : "text-lg font-medium md:text-xl"}>
+          {title.name} ({title.releaseYear})
+        </h3>
+        <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>
+          {title.type} - {title.runtimeMinutes}m
+          {typeof title.rating === "number" ? ` - ${title.rating.toFixed(1)}★` : ""}
         </p>
-        <p className="mt-2 text-zinc-100">{title.overview}</p>
-        <p className="mt-2 text-sm text-zinc-300">Genres: {title.genres.join(", ")}</p>
+        <p className={compactMobile ? "mt-1 text-sm text-zinc-100" : "mt-2 text-zinc-100"} style={overviewStyle}>
+          {title.overview}
+        </p>
+        <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>Genres: {title.genres.join(", ")}</p>
+        {!compactMobile && title.cast?.length ? <p className="mt-1 text-sm text-zinc-300">Cast: {title.cast.join(", ")}</p> : null}
       </div>
     </article>
+  );
+}
+
+function ShowdownChoiceCard({
+  title,
+  onPick,
+  onShowMore
+}: {
+  title: Title;
+  onPick: () => void;
+  onShowMore: () => void;
+}) {
+  const poster = tmdbPosterUrl(title.posterPath);
+  return (
+    <div className="rounded-2xl p-2 sm:p-3">
+      <button
+        className="mx-auto block w-full max-w-[140px] sm:max-w-[170px] overflow-hidden rounded-xl border border-transparent bg-zinc-800/70 aspect-[2/3] transition hover:border-emerald-300/70 hover:shadow-lg hover:shadow-emerald-900/35"
+        onClick={onPick}
+        aria-label={`Pick ${title.name}`}
+      >
+        {poster ? (
+          <img className="h-full w-full object-cover object-center" src={poster} alt={`${title.name} poster`} draggable={false} />
+        ) : (
+          <span className="grid h-full w-full place-items-center text-3xl font-semibold">{title.name.slice(0, 1)}</span>
+        )}
+      </button>
+      <p className="mt-2 line-clamp-2 text-center text-sm font-medium text-zinc-100">
+        {title.name} ({title.releaseYear})
+      </p>
+      <div className="mt-2 grid gap-2">
+        <button
+          className="rounded-full border border-emerald-300/65 bg-emerald-900/35 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-800/55"
+          onClick={onPick}
+        >
+          Pick this
+        </button>
+        <button
+          className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+          onClick={onShowMore}
+        >
+          Show more
+        </button>
+      </div>
+    </div>
   );
 }

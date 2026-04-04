@@ -48,4 +48,5 @@ export function saveLastAnswers(answers: OnboardingAnswers): void {
 
 export function resetPersonalization(): void {
   window.localStorage.removeItem(PROFILE_KEY);
+  window.localStorage.removeItem(ANSWERS_KEY);
 }

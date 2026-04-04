@@ -11,10 +11,11 @@ export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): Onb
     runtime: seed.runtime ?? "any",
     language: seed.language ?? "any",
     releaseWindow: seed.releaseWindow ?? "any",
+    customYearRange: seed.customYearRange ?? null,
     familiarity: seed.familiarity ?? "any",
     providers: seed.providers ?? [],
     hardExclusions: seed.hardExclusions ?? [],
-    usePersonalization: seed.usePersonalization ?? true
+    usePersonalization: true
   };
 }
 
