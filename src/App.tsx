@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MOCK_TITLES } from "./data/mockTitles";
 import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultProfile } from "./engine/profile";
 import { rankTitles } from "./engine/scoring";
@@ -11,7 +11,7 @@ import type { OnboardingAnswers, SessionState, Title } from "./types";
 const MOOD_OPTIONS = ["light", "intense", "emotional", "mind-bending"];
 const PROVIDER_OPTIONS = ["netflix", "prime", "hulu", "max", "apple", "disney"];
 const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
-const EXCLUSION_OPTIONS = ["horror", "crime", "romance", "drama", "action", "thriller"];
+const EXCLUSION_OPTIONS = ["horror", "crime", "romance", "drama", "action", "thriller", "comedy"];
 const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;
 const FAMILIARITY_OPTIONS = ["any", "popular", "hidden-gems"] as const;
 
@@ -63,6 +63,10 @@ export function App() {
   const [isBuildingDeck, setIsBuildingDeck] = useState(false);
   const [roundMessage, setRoundMessage] = useState<string>("");
   const [catalog, setCatalog] = useState<Title[]>(MOCK_TITLES);
+  const [swipeDeltaX, setSwipeDeltaX] = useState(0);
+  const [isDraggingCard, setIsDraggingCard] = useState(false);
+  const swipeStartXRef = useRef<number | null>(null);
+  const SWIPE_TRIGGER_PX = 110;
 
   const titlesById = useMemo(() => {
     return new Map(catalog.map((title) => [title.id, title]));
@@ -76,6 +80,8 @@ export function App() {
   const backup = session.backupId ? titlesById.get(session.backupId) : undefined;
   const hasSelectedQuickMode = Boolean(session.answers.quickModeId);
   const selectedQuickPreset = QUICK_PRESETS.find((preset) => preset.id === session.answers.quickModeId);
+  const passOverlayOpacity = Math.min(1, Math.max(0, -swipeDeltaX / SWIPE_TRIGGER_PX));
+  const keepOverlayOpacity = Math.min(1, Math.max(0, swipeDeltaX / SWIPE_TRIGGER_PX));
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -91,6 +97,12 @@ export function App() {
     script.async = true;
     document.body.appendChild(script);
   }, []);
+
+  useEffect(() => {
+    setSwipeDeltaX(0);
+    setIsDraggingCard(false);
+    swipeStartXRef.current = null;
+  }, [currentTitle?.id]);
 
   async function startSwipeRound() {
     setIsBuildingDeck(true);
@@ -259,6 +271,39 @@ export function App() {
         deckCursor: nextCursor
       };
     });
+  }
+
+  function onSwipePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    swipeStartXRef.current = event.clientX;
+    setIsDraggingCard(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onSwipePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!isDraggingCard || swipeStartXRef.current === null) return;
+    setSwipeDeltaX(event.clientX - swipeStartXRef.current);
+  }
+
+  function onSwipePointerEnd() {
+    if (!isDraggingCard) return;
+
+    const delta = swipeDeltaX;
+    setIsDraggingCard(false);
+    swipeStartXRef.current = null;
+
+    if (delta > SWIPE_TRIGGER_PX) {
+      setSwipeDeltaX(0);
+      handleSwipe("keep");
+      return;
+    }
+
+    if (delta < -SWIPE_TRIGGER_PX) {
+      setSwipeDeltaX(0);
+      handleSwipe("pass");
+      return;
+    }
+
+    setSwipeDeltaX(0);
   }
 
   function handleShowdownPick(winnerPick: "left" | "right") {
@@ -589,24 +634,70 @@ export function App() {
         )}
 
         {session.phase === "swipe" && currentTitle && (
-          <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
-            <h2 className="text-xl font-semibold">Picks</h2>
-            <p className="mt-2 text-sm text-zinc-300">
-              Card {session.deckCursor + 1} / {session.deck.length} - Shortlist: {session.shortlist.length}
-            </p>
-            <TitleCard title={currentTitle} />
-            <div className="mt-4 flex gap-3">
+          <section>
+            <div className="">
+              <h2 className="text-xl font-semibold">Picks</h2>
+              <p className="mt-2 text-sm text-zinc-300">
+                Card {session.deckCursor + 1} / {session.deck.length} - Shortlist: {session.shortlist.length}
+              </p>
+            </div>
+
+            <div
+              className={
+                isDraggingCard
+                  ? "relative mt-4 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/35 p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-none"
+                  : "relative mt-4 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/35 p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-transform duration-200 ease-out"
+              }
+              style={{
+                transform: `translateX(${swipeDeltaX}px) rotate(${swipeDeltaX * 0.06}deg)`
+              }}
+              onPointerDown={onSwipePointerDown}
+              onPointerMove={onSwipePointerMove}
+              onPointerUp={onSwipePointerEnd}
+              onPointerCancel={onSwipePointerEnd}
+            >
+              <div
+                className="pointer-events-none absolute inset-0 bg-rose-300/20 transition-opacity"
+                style={{ opacity: passOverlayOpacity * 0.75 }}
+              />
+              <div
+                className="pointer-events-none absolute inset-0 bg-emerald-300/20 transition-opacity"
+                style={{ opacity: keepOverlayOpacity * 0.75 }}
+              />
+
+              <div className="relative">
+                <div
+                  className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-rose-300/80 bg-rose-950/40 px-3 py-1 text-xs font-bold tracking-wider text-rose-200"
+                  style={{ opacity: passOverlayOpacity }}
+                >
+                  NOPE
+                </div>
+                <div
+                  className="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border-2 border-emerald-300/80 bg-emerald-950/40 px-3 py-1 text-xs font-bold tracking-wider text-emerald-200"
+                  style={{ opacity: keepOverlayOpacity }}
+                >
+                  LIKE
+                </div>
+                <div className="">
+                  <TitleCard title={currentTitle} noTopMargin />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-center gap-10 rounded-2xl p-4">
               <button
-                className="rounded-full border border-rose-300/45 bg-rose-900/40 px-4 py-2 text-sm transition hover:bg-rose-800/50"
+                aria-label="Pass"
+                className="grid h-20 w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-4xl text-rose-200 transition-colors hover:bg-rose-800/55"
                 onClick={() => handleSwipe("pass")}
               >
-                Pass
+                ✕
               </button>
               <button
-                className="rounded-full border border-emerald-300/55 bg-emerald-900/45 px-4 py-2 text-sm transition hover:bg-emerald-800/55"
+                aria-label="Keep"
+                className="grid h-20 w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-4xl text-emerald-200 transition-colors hover:bg-emerald-800/60"
                 onClick={() => handleSwipe("keep")}
               >
-                Keep
+                ♥
               </button>
             </div>
           </section>
@@ -661,7 +752,7 @@ export function App() {
 
 function deriveSmartDefaultsFromProfile(profile: ReturnType<typeof createDefaultProfile>): Partial<OnboardingAnswers> {
   const defaults: Partial<OnboardingAnswers> = {
-    language: "any",
+    language: "en",
     providers: [],
     releaseWindow: "any",
     familiarity: "any"
@@ -713,14 +804,14 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function TitleCard({ title, compact = false }: { title: Title; compact?: boolean }) {
+function TitleCard({ title, compact = false, noTopMargin = false }: { title: Title; compact?: boolean; noTopMargin?: boolean }) {
   const poster = tmdbPosterUrl(title.posterPath);
   return (
     <article
       className={
         compact
-          ? "mt-4 rounded-2xl bg-zinc-900/20 p-3"
-          : "mt-4 rounded-2xl bg-zinc-900/20 p-4"
+          ? `${noTopMargin ? "" : "mt-4 "}rounded-2xl bg-zinc-900/20 p-3`
+          : `${noTopMargin ? "" : "mt-4 "}rounded-2xl bg-zinc-900/20 p-4`
       }
     >
       <div
