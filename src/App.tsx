@@ -40,6 +40,7 @@ export function App() {
   const showdownRight = showdownPair ? titlesById.get(showdownPair[1]) : undefined;
   const winner = session.winnerId ? titlesById.get(session.winnerId) : undefined;
   const backup = session.backupId ? titlesById.get(session.backupId) : undefined;
+  const isCardFocusedPhase = session.phase === "swipe" || session.phase === "showdown";
 
   const {
     hasSelectedQuickMode,
@@ -124,6 +125,26 @@ export function App() {
     }
   }, [session.phase]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    if (isCardFocusedPhase) {
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isCardFocusedPhase]);
+
   function handleResetPersonalization() {
     resetPersonalization();
     setProfile(createDefaultProfile());
@@ -154,7 +175,7 @@ export function App() {
       <div className="pointer-events-none fixed inset-0 z-10 bg-gradient-to-b from-black/40 via-black/55 to-black/80" />
 
       <main className="relative z-20 mx-auto max-w-5xl px-3 py-3 text-zinc-100 sm:px-4 sm:py-5 md:py-10 mb-16">
-        <AppHeader onClearCache={handleResetPersonalization} />
+        {!isCardFocusedPhase ? <AppHeader onClearCache={handleResetPersonalization} /> : null}
 
         {session.phase === "questions" ? (
           <QuestionsSection
