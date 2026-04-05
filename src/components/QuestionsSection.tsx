@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   EXCLUSION_OPTIONS,
   FAMILIARITY_OPTIONS,
@@ -53,6 +54,20 @@ export function QuestionsSection(props: {
   } = props;
 
   const customYearRange = answers.customYearRange;
+  const [keywordsDraft, setKeywordsDraft] = useState((answers.keywords ?? []).join(", "));
+
+  useEffect(() => {
+    setKeywordsDraft((answers.keywords ?? []).join(", "));
+  }, [answers.keywords]);
+
+  function commitKeywords(rawValue: string) {
+    const normalizedKeywords = rawValue
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+    onUpdateAnswers({ keywords: normalizedKeywords });
+    setKeywordsDraft(normalizedKeywords.join(", "));
+  }
 
   return (
     <>
@@ -321,15 +336,15 @@ export function QuestionsSection(props: {
               <input
                 className="w-full rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md placeholder:text-zinc-400"
                 type="text"
-                value={(answers.keywords ?? []).join(", ")}
-                onChange={(event) =>
-                  onUpdateAnswers({
-                    keywords: event.target.value
-                      .split(",")
-                      .map((item) => item.trim().toLowerCase())
-                      .filter(Boolean)
-                  })
-                }
+                value={keywordsDraft}
+                onChange={(event) => setKeywordsDraft(event.target.value)}
+                onBlur={() => commitKeywords(keywordsDraft)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitKeywords(keywordsDraft);
+                  }
+                }}
                 placeholder="animation, black and white, slasher"
               />
             </div>
