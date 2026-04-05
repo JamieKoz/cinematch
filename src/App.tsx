@@ -1,55 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ShowdownChoiceCard } from "./components/ShowdownChoiceCard";
+import { TitleCard } from "./components/TitleCard";
+import {
+  EXCLUSION_OPTIONS,
+  FAMILIARITY_OPTIONS,
+  LANGUAGE_OPTIONS,
+  MOOD_OPTIONS,
+  PROVIDER_OPTIONS,
+  QUICK_PRESETS,
+  RELEASE_WINDOW_OPTIONS,
+  YEAR_MAX,
+  YEAR_MIN
+} from "./config/options";
 import { MOCK_TITLES } from "./data/mockTitles";
 import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultProfile } from "./engine/profile";
 import { rankTitles } from "./engine/scoring";
 import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "./services/ai";
 import { loadLastAnswers, loadProfile, resetPersonalization, saveLastAnswers, saveProfile } from "./services/storage";
-import { enrichTitlesWithTmdb, tmdbPosterUrl } from "./services/tmdb";
+import { enrichTitlesWithTmdb } from "./services/tmdb";
 import { buildDeck, createInitialAnswers, createSession, nextPair } from "./state/machine";
 import type { OnboardingAnswers, SessionState, Title } from "./types";
-
-const MOOD_OPTIONS = ["light", "intense", "emotional", "mind-bending"];
-const PROVIDER_OPTIONS = ["netflix", "prime", "hulu", "max", "apple", "disney"];
-const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
-const EXCLUSION_OPTIONS = ["horror", "crime", "romance", "drama", "action", "thriller", "comedy"];
-const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;
-const FAMILIARITY_OPTIONS = ["any", "popular", "hidden-gems"] as const;
-const YEAR_MIN = 1900;
-const YEAR_MAX = new Date().getFullYear();
-
-type QuickPreset = {
-  id: string;
-  label: string;
-  description: string;
-  values: Partial<OnboardingAnswers>;
-};
-
-const QUICK_PRESETS: QuickPreset[] = [
-  {
-    id: "easy-light",
-    label: "Easy & light",
-    description: "Low effort, short, feel-good choices.",
-    values: { mood: "light", preferredType: "either", runtime: "short", familiarity: "popular" }
-  },
-  {
-    id: "something-deep",
-    label: "Something deep",
-    description: "Richer stories with emotional pull.",
-    values: { mood: "emotional", preferredType: "movie", runtime: "standard", releaseWindow: "2010s" }
-  },
-  {
-    id: "high-intensity",
-    label: "High intensity",
-    description: "Fast pace, tension, and momentum.",
-    values: { mood: "intense", preferredType: "either", runtime: "standard", familiarity: "popular" }
-  },
-  {
-    id: "binge-mode",
-    label: "Binge mode",
-    description: "Series-first setup for longer sessions.",
-    values: { preferredType: "series", runtime: "any" }
-  }
-];
+import { cloneProfile, cloneSession, deriveSmartDefaultsFromProfile, mergeCatalog, slugify } from "./utils/appState";
 
 export function App() {
   const [profile, setProfile] = useState(() => {
@@ -202,7 +173,7 @@ export function App() {
     }));
   }
 
-  function selectQuickMode(preset: QuickPreset) {
+  function selectQuickMode(preset: (typeof QUICK_PRESETS)[number]) {
     const smartDefaults = deriveSmartDefaultsFromProfile(profile);
     updateAnswers({
       ...smartDefaults,
@@ -966,200 +937,6 @@ export function App() {
           </div>
         ) : null}
       </main>
-    </div>
-  );
-}
-
-function deriveSmartDefaultsFromProfile(profile: ReturnType<typeof createDefaultProfile>): Partial<OnboardingAnswers> {
-  const defaults: Partial<OnboardingAnswers> = {
-    language: "en",
-    providers: [],
-    releaseWindow: "any",
-    customYearRange: null,
-    familiarity: "any"
-  };
-
-  const topLanguage = topAffinityKey(profile.languageAffinity, 0.8);
-  if (topLanguage) defaults.language = topLanguage as OnboardingAnswers["language"];
-
-  const topProvider = topAffinityKey(profile.providerAffinity, 1.2);
-  if (topProvider) defaults.providers = [topProvider];
-
-  const topType = profile.typeAffinity.movie === profile.typeAffinity.series
-    ? null
-    : profile.typeAffinity.movie > profile.typeAffinity.series
-      ? "movie"
-      : "series";
-  if (topType) defaults.preferredType = topType;
-
-  return defaults;
-}
-
-function topAffinityKey(affinity: Record<string, number>, minScore: number): string | null {
-  let bestKey: string | null = null;
-  let bestScore = minScore;
-  for (const [key, score] of Object.entries(affinity)) {
-    if (score > bestScore) {
-      bestKey = key;
-      bestScore = score;
-    }
-  }
-  return bestKey;
-}
-
-function cloneSession(session: SessionState): SessionState {
-  return {
-    ...session,
-    answers: { ...session.answers },
-    deck: [...session.deck],
-    shortlist: [...session.shortlist],
-    passed: [...session.passed],
-    showdownQueue: [...session.showdownQueue]
-  };
-}
-
-function cloneProfile(profile: ReturnType<typeof createDefaultProfile>): ReturnType<typeof createDefaultProfile> {
-  return {
-    ...profile,
-    runtimeAffinity: { ...profile.runtimeAffinity },
-    moodAffinity: { ...profile.moodAffinity },
-    genreAffinity: { ...profile.genreAffinity },
-    typeAffinity: { ...profile.typeAffinity },
-    languageAffinity: { ...profile.languageAffinity },
-    providerAffinity: { ...profile.providerAffinity },
-    likedIds: [...profile.likedIds],
-    rejectedIds: [...profile.rejectedIds],
-    seenIds: [...profile.seenIds]
-  };
-}
-
-function mergeCatalog(existing: Title[], updates: Title[]): Title[] {
-  const byId = new Map(existing.map((title) => [title.id, title]));
-  for (const update of updates) {
-    byId.set(update.id, {
-      ...byId.get(update.id),
-      ...update
-    });
-  }
-  return Array.from(byId.values());
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function TitleCard({
-  title,
-  compact = false,
-  noTopMargin = false,
-  compactMobile = false,
-  truncateOverview = false
-}: {
-  title: Title;
-  compact?: boolean;
-  noTopMargin?: boolean;
-  compactMobile?: boolean;
-  truncateOverview?: boolean;
-}) {
-  const poster = tmdbPosterUrl(title.posterPath);
-  const overviewStyle = truncateOverview
-    ? {
-      display: "-webkit-box",
-      WebkitLineClamp: 3,
-      WebkitBoxOrient: "vertical" as const,
-      overflow: "hidden"
-    }
-    : undefined;
-  return (
-    <article
-      className={
-        compact
-          ? `${noTopMargin ? "" : "mt-4 "}rounded-2xl bg-zinc-900/20 p-3`
-          : `${noTopMargin ? "" : "mt-4 "}rounded-2xl p-4`
-      }
-    >
-      <div
-        className={
-          compact
-            ? "mx-auto grid w-full max-w-[170px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-3xl font-semibold aspect-[2/3]"
-            : compactMobile
-              ? "mx-auto grid w-full max-w-[190px] sm:max-w-[240px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-3xl sm:text-4xl font-semibold aspect-[2/3]"
-              : "mx-auto grid w-full max-w-[260px] place-items-center overflow-hidden rounded-xl bg-zinc-800/70 text-4xl font-semibold aspect-[2/3]"
-        }
-      >
-        {poster ? (
-          <img
-            className="h-full w-full object-cover object-center"
-            src={poster}
-            alt={`${title.name} poster`}
-            draggable={false}
-            onDragStart={(event) => event.preventDefault()}
-          />
-        ) : (
-          <span>{title.name.slice(0, 1)}</span>
-        )}
-      </div>
-      <div className={compactMobile ? "mt-2" : "mt-3"}>
-        <h3 className={compactMobile ? "text-base font-medium sm:text-lg md:text-xl" : "text-lg font-medium md:text-xl"}>
-          {title.name} ({title.releaseYear})
-        </h3>
-        <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>
-          {title.type} - {title.runtimeMinutes}m
-          {typeof title.rating === "number" ? ` - ${title.rating.toFixed(1)}★` : ""}
-        </p>
-        <p className={compactMobile ? "mt-1 text-sm text-zinc-100" : "mt-2 text-zinc-100"} style={overviewStyle}>
-          {title.overview}
-        </p>
-        <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>Genres: {title.genres.join(", ")}</p>
-        {!compactMobile && title.cast?.length ? <p className="mt-1 text-sm text-zinc-300">Cast: {title.cast.join(", ")}</p> : null}
-      </div>
-    </article>
-  );
-}
-
-function ShowdownChoiceCard({
-  title,
-  onPick,
-  onShowMore
-}: {
-  title: Title;
-  onPick: () => void;
-  onShowMore: () => void;
-}) {
-  const poster = tmdbPosterUrl(title.posterPath);
-  return (
-    <div className="rounded-2xl p-2 sm:p-3">
-      <button
-        className="mx-auto block w-full max-w-[140px] sm:max-w-[170px] overflow-hidden rounded-xl border border-transparent bg-zinc-800/70 aspect-[2/3] transition hover:border-emerald-300/70 hover:shadow-lg hover:shadow-emerald-900/35"
-        onClick={onPick}
-        aria-label={`Pick ${title.name}`}
-      >
-        {poster ? (
-          <img className="h-full w-full object-cover object-center" src={poster} alt={`${title.name} poster`} draggable={false} />
-        ) : (
-          <span className="grid h-full w-full place-items-center text-3xl font-semibold">{title.name.slice(0, 1)}</span>
-        )}
-      </button>
-      <p className="mt-2 line-clamp-2 text-center text-sm font-medium text-zinc-100">
-        {title.name} ({title.releaseYear})
-      </p>
-      <div className="mt-2 grid gap-2">
-        <button
-          className="rounded-full border border-emerald-300/65 bg-emerald-900/35 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-800/55"
-          onClick={onPick}
-        >
-          Pick this
-        </button>
-        <button
-          className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
-          onClick={onShowMore}
-        >
-          Show more
-        </button>
-      </div>
     </div>
   );
 }
