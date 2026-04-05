@@ -27,7 +27,7 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
     score -= 1.5;
   }
 
-  if (answers.language && answers.language !== "any" && answers.language !== title.language) {
+  if (answers.languages?.length && !answers.languages.includes(title.language)) {
     score -= 1;
   }
 
@@ -51,8 +51,17 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
     }
   }
 
-  if (answers.mood && title.moods.includes(answers.mood)) {
+  if (answers.moods?.length && title.moods.some((mood) => answers.moods?.includes(mood))) {
     score += 3;
+  }
+
+  if (answers.keywords?.length) {
+    const searchable = [title.name, title.overview, ...title.genres, ...title.moods].join(" ").toLowerCase();
+    for (const keyword of answers.keywords) {
+      if (searchable.includes(keyword.toLowerCase())) {
+        score += 1.2;
+      }
+    }
   }
 
   if (answers.providers?.length) {
@@ -83,11 +92,15 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
   score += title.popularity * 0.8;
   score += normalizeRecency(title.releaseYear) * 0.4;
 
-  if (answers.familiarity === "popular") {
+  const wantsPopular = answers.familiarities?.includes("popular");
+  const wantsHiddenGems = answers.familiarities?.includes("hidden-gems");
+  if (wantsPopular && !wantsHiddenGems) {
     score += title.popularity * 1.1;
-  } else if (answers.familiarity === "hidden-gems") {
+  } else if (wantsHiddenGems && !wantsPopular) {
     score += (1 - title.popularity) * 1.1;
-  } else if (answers.familiarity === "for-kids") {
+  }
+
+  if (answers.familiarities?.includes("for-kids")) {
     // Bias toward gentler genres and away from more mature/crime-heavy picks.
     const friendlyMatches = title.genres.filter((genre) => KIDS_FRIENDLY_GENRES.has(genre)).length;
     const unfriendlyMatches = title.genres.filter((genre) => KIDS_UNFRIENDLY_GENRES.has(genre)).length;

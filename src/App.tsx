@@ -52,6 +52,9 @@ export function App() {
     resetQuickSetup,
     toggleProvider,
     toggleExclusion,
+    toggleMood,
+    toggleLanguage,
+    toggleFamiliarity,
     toggleCustomYearRange,
     updateCustomYearRange
   } = useQuickSetup({
@@ -132,6 +135,9 @@ export function App() {
     const previousHtmlOverflow = document.documentElement.style.overflow;
 
     if (isCardFocusedPhase) {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
       document.body.style.overflow = "hidden";
       document.documentElement.style.overflow = "hidden";
     } else {
@@ -192,6 +198,9 @@ export function App() {
             onUpdateCustomYearRange={updateCustomYearRange}
             onToggleProvider={toggleProvider}
             onToggleExclusion={toggleExclusion}
+            onToggleMood={toggleMood}
+            onToggleLanguage={toggleLanguage}
+            onToggleFamiliarity={toggleFamiliarity}
             onStart={startSwipeRound}
           />
         ) : null}

@@ -4,17 +4,24 @@ import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../ty
 const DECK_SIZE = 10;
 
 export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): OnboardingAnswers {
+  const legacySeed = seed as Partial<OnboardingAnswers> & {
+    mood?: string;
+    language?: string;
+    familiarity?: "any" | "popular" | "hidden-gems" | "for-kids";
+  };
+
   return {
     quickModeId: seed.quickModeId,
-    mood: seed.mood,
+    moods: normalizeStringArray(seed.moods ?? legacySeed.mood),
     preferredType: seed.preferredType ?? "either",
     runtime: seed.runtime ?? "any",
-    language: seed.language ?? "any",
+    languages: normalizeLanguages(seed.languages ?? legacySeed.language),
     releaseWindow: seed.releaseWindow ?? "any",
     customYearRange: seed.customYearRange ?? null,
-    familiarity: seed.familiarity ?? "any",
+    familiarities: normalizeFamiliarities(seed.familiarities ?? legacySeed.familiarity),
     providers: seed.providers ?? [],
     hardExclusions: seed.hardExclusions ?? [],
+    keywords: normalizeStringArray(seed.keywords),
     usePersonalization: true
   };
 }
@@ -54,4 +61,30 @@ function clearProfileAffinity(profile: TasteProfile): TasteProfile {
     languageAffinity: {},
     providerAffinity: {}
   };
+}
+
+function normalizeStringArray(value: string[] | string | undefined): string[] {
+  if (!value) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return Array.from(
+    new Set(
+      values
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeFamiliarities(
+  value: Array<"popular" | "hidden-gems" | "for-kids"> | "any" | "popular" | "hidden-gems" | "for-kids" | undefined
+): Array<"popular" | "hidden-gems" | "for-kids"> {
+  const normalized = normalizeStringArray(value).filter(
+    (item): item is "popular" | "hidden-gems" | "for-kids" =>
+      item === "popular" || item === "hidden-gems" || item === "for-kids"
+  );
+  return normalized;
+}
+
+function normalizeLanguages(value: string[] | string | undefined): string[] {
+  return normalizeStringArray(value).filter((language) => language !== "any");
 }

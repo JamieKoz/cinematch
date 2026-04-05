@@ -2,16 +2,16 @@ import type { OnboardingAnswers, SessionState, TasteProfile, Title, TitleType } 
 
 export function deriveSmartDefaultsFromProfile(profile: TasteProfile): Partial<OnboardingAnswers> {
   const defaults: Partial<OnboardingAnswers> = {
-    language: "en",
+    languages: ["en"],
     runtime: "any",
     providers: [],
     releaseWindow: "any",
     customYearRange: null,
-    familiarity: "any"
+    familiarities: []
   };
 
   const topLanguage = topAffinityKey(profile.languageAffinity, 0.8);
-  if (topLanguage) defaults.language = topLanguage as OnboardingAnswers["language"];
+  if (topLanguage) defaults.languages = [topLanguage];
 
   const topProvider = topAffinityKey(profile.providerAffinity, 1.2);
   if (topProvider) defaults.providers = [topProvider];

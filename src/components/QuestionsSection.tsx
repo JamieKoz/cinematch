@@ -27,6 +27,9 @@ export function QuestionsSection(props: {
   onUpdateCustomYearRange: (next: Partial<{ min: number; max: number }>) => void;
   onToggleProvider: (provider: string) => void;
   onToggleExclusion: (exclusion: string) => void;
+  onToggleMood: (mood: string) => void;
+  onToggleLanguage: (language: string) => void;
+  onToggleFamiliarity: (familiarity: "any" | "popular" | "hidden-gems" | "for-kids") => void;
   onStart: () => void;
 }) {
   const {
@@ -43,6 +46,9 @@ export function QuestionsSection(props: {
     onUpdateCustomYearRange,
     onToggleProvider,
     onToggleExclusion,
+    onToggleMood,
+    onToggleLanguage,
+    onToggleFamiliarity,
     onStart
   } = props;
 
@@ -89,11 +95,11 @@ export function QuestionsSection(props: {
                   <button
                     key={mood}
                     className={
-                      answers.mood === mood
+                      answers.moods?.includes(mood)
                         ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
                         : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
                     }
-                    onClick={() => onUpdateAnswers({ mood })}
+                    onClick={() => onToggleMood(mood)}
                   >
                     {mood}
                   </button>
@@ -210,7 +216,7 @@ export function QuestionsSection(props: {
               <label className="text-sm text-zinc-200">Language</label>
               <div className="flex flex-wrap gap-2">
                 {LANGUAGE_OPTIONS.map((language) => {
-                  const selected = (answers.language ?? "any") === language;
+                  const selected = language === "any" ? !answers.languages?.length : answers.languages?.includes(language);
                   return (
                     <button
                       key={language}
@@ -219,7 +225,7 @@ export function QuestionsSection(props: {
                           ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
                           : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
                       }
-                      onClick={() => onUpdateAnswers({ language: language as OnboardingAnswers["language"] })}
+                      onClick={() => onToggleLanguage(language)}
                     >
                       {language === "any" ? "Any language" : language.toUpperCase()}
                     </button>
@@ -232,7 +238,7 @@ export function QuestionsSection(props: {
               <label className="text-sm text-zinc-200">Discovery style</label>
               <div className="flex flex-wrap gap-2">
                 {FAMILIARITY_OPTIONS.map((familiarity) => {
-                  const selected = (answers.familiarity ?? "any") === familiarity;
+                  const selected = familiarity === "any" ? !answers.familiarities?.length : answers.familiarities?.includes(familiarity);
                   return (
                     <button
                       key={familiarity}
@@ -241,7 +247,7 @@ export function QuestionsSection(props: {
                           ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
                           : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
                       }
-                      onClick={() => onUpdateAnswers({ familiarity })}
+                      onClick={() => onToggleFamiliarity(familiarity)}
                     >
                       {familiarity === "any"
                         ? "Any"
@@ -308,6 +314,24 @@ export function QuestionsSection(props: {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="mt-4 grid gap-2">
+              <label className="text-sm text-zinc-200">Keywords (optional)</label>
+              <input
+                className="w-full rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md placeholder:text-zinc-400"
+                type="text"
+                value={(answers.keywords ?? []).join(", ")}
+                onChange={(event) =>
+                  onUpdateAnswers({
+                    keywords: event.target.value
+                      .split(",")
+                      .map((item) => item.trim().toLowerCase())
+                      .filter(Boolean)
+                  })
+                }
+                placeholder="animation, black and white, slasher"
+              />
             </div>
           </>
         ) : (

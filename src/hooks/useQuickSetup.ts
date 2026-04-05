@@ -63,6 +63,39 @@ export function useQuickSetup(params: {
     });
   }
 
+  function toggleMood(mood: string) {
+    const selected = answers.moods?.includes(mood);
+    updateAnswers({
+      moods: selected ? answers.moods?.filter((value) => value !== mood) : [...(answers.moods ?? []), mood]
+    });
+  }
+
+  function toggleLanguage(language: string) {
+    if (language === "any") {
+      updateAnswers({ languages: [] });
+      return;
+    }
+    const selected = answers.languages?.includes(language);
+    updateAnswers({
+      languages: selected
+        ? answers.languages?.filter((value) => value !== language)
+        : [...(answers.languages ?? []), language]
+    });
+  }
+
+  function toggleFamiliarity(familiarity: "any" | "popular" | "hidden-gems" | "for-kids") {
+    if (familiarity === "any") {
+      updateAnswers({ familiarities: [] });
+      return;
+    }
+    const selected = answers.familiarities?.includes(familiarity);
+    updateAnswers({
+      familiarities: selected
+        ? answers.familiarities?.filter((value) => value !== familiarity)
+        : [...(answers.familiarities ?? []), familiarity]
+    });
+  }
+
   function toggleCustomYearRange() {
     if (answers.customYearRange) {
       updateAnswers({ customYearRange: null });
@@ -91,6 +124,9 @@ export function useQuickSetup(params: {
     resetQuickSetup,
     toggleProvider,
     toggleExclusion,
+    toggleMood,
+    toggleLanguage,
+    toggleFamiliarity,
     toggleCustomYearRange,
     updateCustomYearRange
   };

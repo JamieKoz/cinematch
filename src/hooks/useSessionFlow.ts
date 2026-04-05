@@ -60,13 +60,13 @@ export function useSessionFlow(params: {
             type: item.type,
             runtimeMinutes: item.type === "series" ? 45 : 110,
             genres: [],
-            moods: session.answers.mood ? [session.answers.mood] : [],
-            language: session.answers.language && session.answers.language !== "any" ? session.answers.language : "en",
+            moods: [...(session.answers.moods ?? [])],
+            language: session.answers.languages?.[0] ?? "en",
             providers: [...(session.answers.providers ?? [])],
             popularity: 0.6,
             releaseYear: new Date().getFullYear(),
             posterPath: null,
-            overview: item.reason ?? "AI-picked for your current mood."
+            overview: item.reason ?? "AI-picked for your current vibe."
           }));
 
           deckTitles = tmdbEnabled ? await enrichTitlesWithTmdb(generatedTitles) : generatedTitles;
@@ -151,7 +151,7 @@ export function useSessionFlow(params: {
           deckCursor: 0,
           answers: {
             ...prev.answers,
-            mood: prev.answers.mood === "light" ? "intense" : "light"
+            moods: prev.answers.moods?.includes("light") ? ["intense"] : ["light"]
           }
         };
       }

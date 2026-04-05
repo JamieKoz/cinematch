@@ -7,15 +7,16 @@ export type SwipeAction = "keep" | "pass";
 
 export interface OnboardingAnswers {
   quickModeId?: string;
-  mood?: string;
+  moods?: string[];
   preferredType?: TitleType | "either";
   runtime?: RuntimeBucket | "any";
-  language?: string | "any";
+  languages?: string[];
   releaseWindow?: "any" | "2020s" | "2010s" | "2000s" | "pre-2000";
   customYearRange?: { min: number; max: number } | null;
-  familiarity?: "any" | "popular" | "hidden-gems" | "for-kids";
+  familiarities?: Array<"popular" | "hidden-gems" | "for-kids">;
   providers?: string[];
   hardExclusions?: string[];
+  keywords?: string[];
   usePersonalization: boolean;
 }
 
