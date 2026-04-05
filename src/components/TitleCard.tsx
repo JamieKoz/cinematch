@@ -66,7 +66,11 @@ export function TitleCard({
         <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>
           Genres: {title.genres.join(", ")}
         </p>
-        {!compactMobile && title.cast?.length ? <p className="mt-1 text-sm text-zinc-300">Cast: {title.cast.join(", ")}</p> : null}
+        {title.cast?.length ? (
+          <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-1 text-sm text-zinc-300"}>
+            Cast: {title.cast.join(", ")}
+          </p>
+        ) : null}
       </div>
     </article>
   );

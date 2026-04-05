@@ -1,26 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ShowdownChoiceCard } from "./components/ShowdownChoiceCard";
-import { TitleCard } from "./components/TitleCard";
-import {
-  EXCLUSION_OPTIONS,
-  FAMILIARITY_OPTIONS,
-  LANGUAGE_OPTIONS,
-  MOOD_OPTIONS,
-  PROVIDER_OPTIONS,
-  QUICK_PRESETS,
-  RELEASE_WINDOW_OPTIONS,
-  YEAR_MAX,
-  YEAR_MIN
-} from "./config/options";
+import { useEffect, useMemo, useState } from "react";
+import { AppHeader } from "./components/AppHeader";
+import { QuestionsSection } from "./components/QuestionsSection";
+import { ResultSection } from "./components/ResultSection";
+import { ShowdownDetailsModal } from "./components/ShowdownDetailsModal";
+import { ShowdownSection } from "./components/ShowdownSection";
+import { SwipeSection } from "./components/SwipeSection";
 import { MOCK_TITLES } from "./data/mockTitles";
-import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultProfile } from "./engine/profile";
-import { rankTitles } from "./engine/scoring";
-import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "./services/ai";
-import { loadLastAnswers, loadProfile, resetPersonalization, saveLastAnswers, saveProfile } from "./services/storage";
-import { enrichTitlesWithTmdb } from "./services/tmdb";
-import { buildDeck, createInitialAnswers, createSession, nextPair } from "./state/machine";
-import type { OnboardingAnswers, SessionState, Title } from "./types";
-import { cloneProfile, cloneSession, deriveSmartDefaultsFromProfile, mergeCatalog, slugify } from "./utils/appState";
+import { createDefaultProfile } from "./engine/profile";
+import { useQuickSetup } from "./hooks/useQuickSetup";
+import { useShareCurrentTitle } from "./hooks/useShareCurrentTitle";
+import { useSessionFlow } from "./hooks/useSessionFlow";
+import { useSwipeGesture } from "./hooks/useSwipeGesture";
+import { loadLastAnswers, loadProfile, resetPersonalization, saveProfile } from "./services/storage";
+import { createInitialAnswers, createSession, nextPair } from "./state/machine";
+import type { SessionState, Title } from "./types";
 
 export function App() {
   const [profile, setProfile] = useState(() => {
@@ -33,15 +26,8 @@ export function App() {
     return createSession(createInitialAnswers(seed));
   });
 
-  const [isBuildingDeck, setIsBuildingDeck] = useState(false);
   const [catalog, setCatalog] = useState<Title[]>(MOCK_TITLES);
-  const [lastSwipeSnapshot, setLastSwipeSnapshot] = useState<{ session: SessionState; profile: ReturnType<typeof createDefaultProfile> } | null>(null);
-  const [swipeDeltaX, setSwipeDeltaX] = useState(0);
-  const [isDraggingCard, setIsDraggingCard] = useState(false);
-  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
   const [showdownDetailsTitle, setShowdownDetailsTitle] = useState<Title | null>(null);
-  const swipeStartXRef = useRef<number | null>(null);
-  const SWIPE_TRIGGER_PX = 110;
 
   const titlesById = useMemo(() => {
     return new Map(catalog.map((title) => [title.id, title]));
@@ -54,17 +40,68 @@ export function App() {
   const showdownRight = showdownPair ? titlesById.get(showdownPair[1]) : undefined;
   const winner = session.winnerId ? titlesById.get(session.winnerId) : undefined;
   const backup = session.backupId ? titlesById.get(session.backupId) : undefined;
-  const hasSelectedQuickMode = Boolean(session.answers.quickModeId);
-  const selectedQuickPreset = QUICK_PRESETS.find((preset) => preset.id === session.answers.quickModeId);
-  const passOverlayOpacity = Math.min(1, Math.max(0, -swipeDeltaX / SWIPE_TRIGGER_PX));
-  const keepOverlayOpacity = Math.min(1, Math.max(0, swipeDeltaX / SWIPE_TRIGGER_PX));
-  const customYearRange = session.answers.customYearRange;
-  const customYearStartPct = customYearRange
-    ? ((customYearRange.min - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100
-    : 0;
-  const customYearEndPct = customYearRange
-    ? ((customYearRange.max - YEAR_MIN) / (YEAR_MAX - YEAR_MIN)) * 100
-    : 100;
+
+  const {
+    hasSelectedQuickMode,
+    selectedQuickPreset,
+    customYearStartPct,
+    customYearEndPct,
+    updateAnswers,
+    selectQuickMode,
+    resetQuickSetup,
+    toggleProvider,
+    toggleExclusion,
+    toggleCustomYearRange,
+    updateCustomYearRange
+  } = useQuickSetup({
+    answers: session.answers,
+    profile,
+    setSession
+  });
+
+  const {
+    isBuildingDeck,
+    canUndo,
+    startSwipeRound,
+    handleSwipe,
+    handleUndoSwipe: undoSwipeSessionState,
+    handleShowdownPick,
+    finalizeDecision,
+    resetAndStartNewRound
+  } = useSessionFlow({
+    session,
+    setSession,
+    profile,
+    setProfile,
+    catalog,
+    setCatalog,
+    currentTitle,
+    showdownLeft,
+    showdownRight,
+    winner
+  });
+
+  const {
+    swipeDeltaX,
+    isDraggingCard,
+    passOverlayOpacity,
+    keepOverlayOpacity,
+    onSwipePointerDown,
+    onSwipePointerMove,
+    onSwipePointerEnd,
+    resetSwipeGesture
+  } = useSwipeGesture({
+    currentTitleId: currentTitle?.id,
+    onSwipeKeep: () => handleSwipe("keep"),
+    onSwipePass: () => handleSwipe("pass")
+  });
+
+  const { shareFeedback, handleShareCurrentTitle } = useShareCurrentTitle(currentTitle);
+
+  function handleUndoSwipe() {
+    undoSwipeSessionState();
+    resetSwipeGesture();
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -82,340 +119,21 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    setSwipeDeltaX(0);
-    setIsDraggingCard(false);
-    swipeStartXRef.current = null;
-  }, [currentTitle?.id]);
-
-  useEffect(() => {
     if (session.phase !== "showdown") {
       setShowdownDetailsTitle(null);
     }
   }, [session.phase]);
 
-  useEffect(() => {
-    if (!shareFeedback) return;
-    const timer = window.setTimeout(() => setShareFeedback(null), 1800);
-    return () => window.clearTimeout(timer);
-  }, [shareFeedback]);
-
-  async function startSwipeRound() {
-    setIsBuildingDeck(true);
-    setLastSwipeSnapshot(null);
-    saveLastAnswers({ ...session.answers, quickModeId: undefined });
-
-    const aiEnabled = Boolean(import.meta.env.VITE_OPENAI_API_KEY);
-    const tmdbEnabled = Boolean(import.meta.env.VITE_TMDB_READ_ACCESS_TOKEN);
-    let deckTitles: Title[] = [];
-
-    if (aiEnabled) {
-      const generated = await generateSuggestionsWithAi({
-        answers: session.answers,
-        profile,
-        count: 10
-      });
-
-      if (generated.length > 0) {
-        const generatedTitles: Title[] = generated.map((item, index) => ({
-          id: `ai-${index}-${slugify(item.name)}`,
-          name: item.name,
-          type: item.type,
-          runtimeMinutes: item.type === "series" ? 45 : 110,
-          genres: [],
-          moods: session.answers.mood ? [session.answers.mood] : [],
-          language: session.answers.language && session.answers.language !== "any" ? session.answers.language : "en",
-          providers: [...(session.answers.providers ?? [])],
-          popularity: 0.6,
-          releaseYear: new Date().getFullYear(),
-          posterPath: null,
-          overview: item.reason ?? "AI-picked for your current mood."
-        }));
-
-        deckTitles = tmdbEnabled ? await enrichTitlesWithTmdb(generatedTitles) : generatedTitles;
-      }
-    }
-
-    if (deckTitles.length === 0) {
-      const sorted = rankTitles(catalog, session.answers, session.answers.usePersonalization ? profile : createDefaultProfile());
-      const top20 = sorted.slice(0, 20);
-      const reranked = await rerankCandidatesWithAi({ answers: session.answers, profile, candidates: top20 });
-      const baseDeckTitles = (reranked.length ? reranked : top20).slice(0, 10);
-      deckTitles = tmdbEnabled ? await enrichTitlesWithTmdb(baseDeckTitles) : baseDeckTitles;
-    }
-
-    if (deckTitles.length > 0) setCatalog((prev) => mergeCatalog(prev, deckTitles));
-
-    const ids = deckTitles.map((title) => title.id);
-    const fallback = buildDeck(catalog, session.answers, profile);
-    const deck = ids.length ? ids : fallback;
-
-    setSession((prev) => ({
-      ...prev,
-      phase: "swipe",
-      deck,
-      deckCursor: 0,
-      shortlist: [],
-      passed: [],
-      showdownQueue: [],
-      winnerId: undefined,
-      backupId: undefined
-    }));
-    setIsBuildingDeck(false);
-  }
-
-  function updateAnswers(next: Partial<OnboardingAnswers>) {
-    setSession((prev) => ({
-      ...prev,
-      answers: {
-        ...prev.answers,
-        ...next
-      }
-    }));
-  }
-
-  function selectQuickMode(preset: (typeof QUICK_PRESETS)[number]) {
-    const smartDefaults = deriveSmartDefaultsFromProfile(profile);
-    updateAnswers({
-      ...smartDefaults,
-      ...preset.values,
-      quickModeId: preset.id
-    });
-  }
-
-  function resetQuickSetup(): void {
-    const smartDefaults = deriveSmartDefaultsFromProfile(profile);
-    updateAnswers({
-      ...smartDefaults,
-      quickModeId: undefined
-    });
-  }
-
-  function toggleProvider(provider: string) {
-    const selected = session.answers.providers?.includes(provider);
-    updateAnswers({
-      providers: selected
-        ? session.answers.providers?.filter((value) => value !== provider)
-        : [...(session.answers.providers ?? []), provider]
-    });
-  }
-
-  function toggleExclusion(exclusion: string) {
-    const selected = session.answers.hardExclusions?.includes(exclusion);
-    updateAnswers({
-      hardExclusions: selected
-        ? session.answers.hardExclusions?.filter((value) => value !== exclusion)
-        : [...(session.answers.hardExclusions ?? []), exclusion]
-    });
-  }
-
-  function toggleCustomYearRange(): void {
-    if (session.answers.customYearRange) {
-      updateAnswers({ customYearRange: null });
-      return;
-    }
-    updateAnswers({
-      customYearRange: { min: 2000, max: YEAR_MAX }
-    });
-  }
-
-  function updateCustomYearRange(next: Partial<{ min: number; max: number }>): void {
-    const current = session.answers.customYearRange ?? { min: 2000, max: YEAR_MAX };
-    const merged = { ...current, ...next };
-    const min = Math.max(YEAR_MIN, Math.min(merged.min, merged.max));
-    const max = Math.min(YEAR_MAX, Math.max(merged.max, min));
-    updateAnswers({ customYearRange: { min, max } });
-  }
-
-  function handleSwipe(action: "keep" | "pass") {
-    if (!currentTitle) return;
-    setLastSwipeSnapshot({
-      session: cloneSession(session),
-      profile: cloneProfile(profile)
-    });
-
-    if (action === "keep") {
-      setProfile((prev) => applyKeepSignal(prev, currentTitle));
-    } else {
-      setProfile((prev) => applyPassSignal(prev, currentTitle));
-    }
-
-    setSession((prev) => {
-      const shortlist = action === "keep" ? [...prev.shortlist, currentTitle.id] : prev.shortlist;
-      const passed = action === "pass" ? [...prev.passed, currentTitle.id] : prev.passed;
-      const nextCursor = prev.deckCursor + 1;
-
-      if (shortlist.length >= 5) {
-        return {
-          ...prev,
-          phase: "showdown",
-          shortlist,
-          passed,
-          showdownQueue: [...shortlist]
-        };
-      }
-
-      if (nextCursor >= prev.deck.length) {
-        if (shortlist.length >= 2) {
-          return {
-            ...prev,
-            phase: "showdown",
-            shortlist,
-            passed,
-            showdownQueue: [...shortlist]
-          };
-        }
-
-        return {
-          ...prev,
-          phase: "questions",
-          shortlist,
-          passed,
-          deck: [],
-          deckCursor: 0,
-          answers: {
-            ...prev.answers,
-            mood: prev.answers.mood === "light" ? "intense" : "light"
-          }
-        };
-      }
-
-      return {
-        ...prev,
-        shortlist,
-        passed,
-        deckCursor: nextCursor
-      };
-    });
-  }
-
-  function handleUndoSwipe() {
-    if (!lastSwipeSnapshot) return;
-    setSession(lastSwipeSnapshot.session);
-    setProfile(lastSwipeSnapshot.profile);
-    setLastSwipeSnapshot(null);
-    setSwipeDeltaX(0);
-    setIsDraggingCard(false);
-    swipeStartXRef.current = null;
-  }
-
-  async function handleShareCurrentTitle() {
-    if (!currentTitle) return;
-    const shareText = `${currentTitle.name} (${currentTitle.releaseYear})`;
-    const payload = {
-      title: "CineMatch pick",
-      text: `Check out this pick: ${shareText}`
-    };
-
-    try {
-      if (typeof navigator !== "undefined" && "share" in navigator) {
-        await navigator.share(payload);
-        setShareFeedback("Shared");
-        return;
-      }
-    } catch {
-      // fall through to clipboard
-    }
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(payload.text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = payload.text;
-        textarea.setAttribute("readonly", "true");
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      setShareFeedback("Copied");
-    } catch {
-      setShareFeedback("Unable to share");
-    }
-  }
-
-  function onSwipePointerDown(event: React.PointerEvent<HTMLDivElement>) {
-    swipeStartXRef.current = event.clientX;
-    setIsDraggingCard(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function onSwipePointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    if (!isDraggingCard || swipeStartXRef.current === null) return;
-    setSwipeDeltaX(event.clientX - swipeStartXRef.current);
-  }
-
-  function onSwipePointerEnd() {
-    if (!isDraggingCard) return;
-
-    const delta = swipeDeltaX;
-    setIsDraggingCard(false);
-    swipeStartXRef.current = null;
-
-    if (delta > SWIPE_TRIGGER_PX) {
-      setSwipeDeltaX(0);
-      handleSwipe("keep");
-      return;
-    }
-
-    if (delta < -SWIPE_TRIGGER_PX) {
-      setSwipeDeltaX(0);
-      handleSwipe("pass");
-      return;
-    }
-
-    setSwipeDeltaX(0);
-  }
-
-  function handleShowdownPick(winnerPick: "left" | "right") {
-    if (!showdownPair || !showdownLeft || !showdownRight) return;
-
-    const winnerId = winnerPick === "left" ? showdownLeft.id : showdownRight.id;
-    const loserId = winnerPick === "left" ? showdownRight.id : showdownLeft.id;
-
-    setSession((prev) => {
-      const [first, second, ...rest] = prev.showdownQueue;
-      if (!first || !second) return prev;
-
-      const nextQueue = [...rest, winnerId];
-      if (nextQueue.length === 1) {
-        return {
-          ...prev,
-          phase: "result",
-          showdownQueue: nextQueue,
-          winnerId,
-          backupId: loserId
-        };
-      }
-
-      return {
-        ...prev,
-        showdownQueue: nextQueue
-      };
-    });
-  }
-
-  function finalizeDecision() {
-    if (!winner) return;
-    setProfile((prev) => applyDecisionSignal(prev, winner));
-  }
-
-  function resetAndStartNewRound() {
-    const nextAnswers: OnboardingAnswers = {
-      ...session.answers,
-      quickModeId: undefined
-    };
-    setSession(() => ({
-      ...createSession(nextAnswers),
-      answers: nextAnswers
-    }));
-  }
-
   function handleResetPersonalization() {
     resetPersonalization();
     setProfile(createDefaultProfile());
+  }
+
+  function handleWatchNow() {
+    finalizeDecision();
+    if (!winner || typeof window === "undefined") return;
+    const query = encodeURIComponent(`${winner.name} ${winner.releaseYear}`);
+    window.open(`https://www.justwatch.com/us/search?q=${query}`, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -436,506 +154,72 @@ export function App() {
       <div className="pointer-events-none fixed inset-0 z-10 bg-gradient-to-b from-black/40 via-black/55 to-black/80" />
 
       <main className="relative z-20 mx-auto max-w-5xl px-3 py-3 text-zinc-100 sm:px-4 sm:py-5 md:py-10">
-        <header className="mb-3">
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">CineMatch</h1>
-            <details className="group relative">
-              <summary className="list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70">
-                <span className="sr-only">Settings</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  className="h-5 w-5"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M10.325 4.317a1.724 1.724 0 0 1 3.35 0 1.724 1.724 0 0 0 2.573 1.066 1.724 1.724 0 0 1 2.49 2.49 1.724 1.724 0 0 0 1.065 2.573 1.724 1.724 0 0 1 0 3.35 1.724 1.724 0 0 0-1.066 2.573 1.724 1.724 0 0 1-2.49 2.49 1.724 1.724 0 0 0-2.573 1.065 1.724 1.724 0 0 1-3.35 0 1.724 1.724 0 0 0-2.573-1.066 1.724 1.724 0 0 1-2.49-2.49 1.724 1.724 0 0 0-1.065-2.573 1.724 1.724 0 0 1 0-3.35 1.724 1.724 0 0 0 1.066-2.573 1.724 1.724 0 0 1 2.49-2.49 1.724 1.724 0 0 0 2.573-1.065Z"
-                  />
-                  <circle cx="12" cy="12" r="3.25" />
-                </svg>
-              </summary>
-              <div className="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-white/20 bg-zinc-900/90 p-2 shadow-2xl backdrop-blur-xl">
-                <button
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80"
-                  onClick={handleResetPersonalization}
-                >
-                  Clear cache
-                </button>
-              </div>
-            </details>
-          </div>
-          <div>
-            <p className="text-sm text-zinc-300 md:text-base">Find the match for your next film.</p>
-          </div>
-        </header>
+        <AppHeader onClearCache={handleResetPersonalization} />
 
-        {session.phase === "questions" && (
-          <>
-            <section className="p-5 shadow-2xl">
-
-              {!hasSelectedQuickMode ? (
-                <div className="mt-4 grid gap-2">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {QUICK_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        className="rounded-2xl border border-white/25 bg-zinc-900/60 p-4 text-left transition hover:border-white/45 hover:bg-zinc-800/70"
-                        onClick={() => selectQuickMode(preset)}
-                      >
-                        <p className="text-sm font-semibold text-white">{preset.label}</p>
-                        <p className="mt-1 text-xs text-zinc-300">{preset.description}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 flex flex-col items-start gap-2 rounded-xl sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-zinc-300 sm:text-sm">
-                    Selected quick mode: <span className="font-medium text-zinc-100">{selectedQuickPreset?.label ?? "Custom"}</span>
-                  </p>
-                  <button
-                    className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1 text-xs transition hover:border-white/45 hover:bg-zinc-800/70"
-                    onClick={resetQuickSetup}
-                  >
-                    Reset
-                  </button>
-                </div>
-              )}
-
-              {hasSelectedQuickMode ? (
-                <>
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Mood</label>
-                    <div className="flex flex-wrap gap-2">
-                      {MOOD_OPTIONS.map((mood) => (
-                        <button
-                          key={mood}
-                          className={
-                            session.answers.mood === mood
-                              ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                              : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                          }
-                          onClick={() => updateAnswers({ mood })}
-                        >
-                          {mood}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Type</label>
-                    <select
-                      className="w-full sm:w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
-                      value={session.answers.preferredType ?? "either"}
-                      onChange={(event) => updateAnswers({ preferredType: event.target.value as OnboardingAnswers["preferredType"] })}
-                    >
-                      <option value="either">Either</option>
-                      <option value="movie">Movie</option>
-                      <option value="series">Series</option>
-                    </select>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Runtime</label>
-                    <select
-                      className="w-full sm:w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
-                      value={session.answers.runtime ?? "any"}
-                      onChange={(event) => updateAnswers({ runtime: event.target.value as OnboardingAnswers["runtime"] })}
-                    >
-                      <option value="any">Any</option>
-                      <option value="short">Under 90m</option>
-                      <option value="standard">90-130m</option>
-                      <option value="long">130m+</option>
-                    </select>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Release style</label>
-                    <div className="flex flex-wrap gap-2">
-                      {RELEASE_WINDOW_OPTIONS.map((window) => {
-                        const selected = (session.answers.releaseWindow ?? "any") === window;
-                        return (
-                          <button
-                            key={window}
-                            className={
-                              selected
-                                ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                                : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                            }
-                            onClick={() => updateAnswers({ releaseWindow: window, customYearRange: null })}
-                          >
-                            {window === "any"
-                              ? "Any"
-                              : window === "2020s"
-                                ? "2020+"
-                                : window === "2010s"
-                                  ? "2010-2019"
-                                  : window === "2000s"
-                                    ? "2000-2009"
-                                    : "Before 2000"}
-                          </button>
-                        );
-                      })}
-                      <button
-                        className={
-                          session.answers.customYearRange
-                            ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                            : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                        }
-                        onClick={toggleCustomYearRange}
-                      >
-                        Custom range
-                      </button>
-                    </div>
-                    {customYearRange ? (
-                      <div className="mt-2 rounded-xl border border-white/20 bg-zinc-900/45 p-3">
-                        <p className="text-xs text-zinc-300">
-                          Year range: <span className="font-medium text-zinc-100">{customYearRange.min}</span> -{" "}
-                          <span className="font-medium text-zinc-100">{customYearRange.max}</span>
-                        </p>
-                        <div className="relative mt-3 h-8">
-                          <div className="absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-700/70" />
-                          <div
-                            className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-violet-400/80"
-                            style={{
-                              left: `${customYearStartPct}%`,
-                              right: `${100 - customYearEndPct}%`
-                            }}
-                          />
-                          <input
-                            className="dual-range dual-range-min absolute inset-0 w-full"
-                            type="range"
-                            min={YEAR_MIN}
-                            max={YEAR_MAX}
-                            value={customYearRange.min}
-                            onChange={(event) => updateCustomYearRange({ min: Number(event.target.value) })}
-                          />
-                          <input
-                            className="dual-range dual-range-max absolute inset-0 w-full"
-                            type="range"
-                            min={YEAR_MIN}
-                            max={YEAR_MAX}
-                            value={customYearRange.max}
-                            onChange={(event) => updateCustomYearRange({ max: Number(event.target.value) })}
-                          />
-                        </div>
-                        <div className="mt-1 flex justify-between text-[11px] text-zinc-400">
-                          <span>{YEAR_MIN}</span>
-                          <span>{YEAR_MAX}</span>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Language</label>
-                    <div className="flex flex-wrap gap-2">
-                      {LANGUAGE_OPTIONS.map((language) => {
-                        const selected = (session.answers.language ?? "any") === language;
-                        return (
-                          <button
-                            key={language}
-                            className={
-                              selected
-                                ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                                : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                            }
-                            onClick={() => updateAnswers({ language: language as OnboardingAnswers["language"] })}
-                          >
-                            {language === "any" ? "Any language" : language.toUpperCase()}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Discovery style</label>
-                    <div className="flex flex-wrap gap-2">
-                      {FAMILIARITY_OPTIONS.map((familiarity) => {
-                        const selected = (session.answers.familiarity ?? "any") === familiarity;
-                        return (
-                          <button
-                            key={familiarity}
-                            className={
-                              selected
-                                ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                                : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                            }
-                            onClick={() => updateAnswers({ familiarity })}
-                          >
-                            {familiarity === "any"
-                              ? "Any"
-                              : familiarity === "popular"
-                                ? "Popular picks"
-                                : "Hidden gems"}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Provider</label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className={
-                          !session.answers.providers?.length
-                            ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                            : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                        }
-                        onClick={() => updateAnswers({ providers: [] })}
-                      >
-                        No preference
-                      </button>
-                      {PROVIDER_OPTIONS.map((provider) => {
-                        const selected = session.answers.providers?.includes(provider);
-                        return (
-                          <button
-                            key={provider}
-                            className={
-                              selected
-                                ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
-                                : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                            }
-                            onClick={() => toggleProvider(provider)}
-                          >
-                            {provider}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <label className="text-sm text-zinc-200">Avoid tonight</label>
-                    <div className="flex flex-wrap gap-2">
-                      {EXCLUSION_OPTIONS.map((exclusion) => {
-                        const selected = session.answers.hardExclusions?.includes(exclusion);
-                        return (
-                          <button
-                            key={exclusion}
-                            className={
-                              selected
-                                ? "rounded-full border border-rose-300/70 bg-rose-500/25 px-3 py-1.5 text-sm transition hover:bg-rose-500/35"
-                                : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
-                            }
-                            onClick={() => toggleExclusion(exclusion)}
-                          >
-                            {exclusion}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                </>
-              ) : (
-                <p className="mt-4 text-sm text-zinc-300"></p>
-              )}
-            </section>
-            {hasSelectedQuickMode ? (
-              <div className="mt-5 flex justify-center">
-                <button
-                  className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 disabled:opacity-70"
-                  onClick={startSwipeRound}
-                  disabled={isBuildingDeck}
-                >
-                  {isBuildingDeck ? "Building your deck..." : "Start"}
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
-
-        {session.phase === "swipe" && currentTitle && (
-          <section>
-            <div className="">
-              <p className="mt-2 text-sm text-zinc-300">
-                Card {session.deckCursor + 1} / {session.deck.length} - Shortlist: {session.shortlist.length}
-              </p>
-            </div>
-
-            <div className="relative mt-3">
-              {nextSwipeTitle ? (
-                <div className="pointer-events-none absolute inset-0 z-0 translate-y-2 scale-[0.97] opacity-25">
-                  <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-zinc-900/25 p-2 sm:p-4 shadow-xl backdrop-blur-xl">
-                    <TitleCard title={nextSwipeTitle} noTopMargin compactMobile truncateOverview />
-                  </div>
-                </div>
-              ) : null}
-
-              <div
-                className={
-                  isDraggingCard
-                    ? "relative z-10 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/20 p-2 sm:p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-none"
-                    : "relative z-10 overflow-hidden rounded-3xl border border-white/20 bg-zinc-900/20 p-2 sm:p-4 shadow-2xl backdrop-blur-xl touch-pan-y select-none transition-transform duration-200 ease-out"
-                }
-                style={{
-                  transform: `translateX(${swipeDeltaX}px) rotate(${swipeDeltaX * 0.06}deg)`
-                }}
-                onDragStart={(event) => event.preventDefault()}
-                onPointerDown={onSwipePointerDown}
-                onPointerMove={onSwipePointerMove}
-                onPointerUp={onSwipePointerEnd}
-                onPointerCancel={onSwipePointerEnd}
-              >
-                <div
-                  className="pointer-events-none absolute inset-0 bg-rose-300/20 transition-opacity"
-                  style={{ opacity: passOverlayOpacity * 0.75 }}
-                />
-                <div
-                  className="pointer-events-none absolute inset-0 bg-emerald-300/20 transition-opacity"
-                  style={{ opacity: keepOverlayOpacity * 0.75 }}
-                />
-
-                <div className="relative">
-                  <div
-                    className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border-2 border-rose-300/80 bg-rose-950/40 px-3 py-1 text-xs font-bold tracking-wider text-rose-200"
-                    style={{ opacity: passOverlayOpacity }}
-                  >
-                    NOPE
-                  </div>
-                  <div
-                    className="pointer-events-none absolute right-4 top-4 z-10 rounded-lg border-2 border-emerald-300/80 bg-emerald-950/40 px-3 py-1 text-xs font-bold tracking-wider text-emerald-200"
-                    style={{ opacity: keepOverlayOpacity }}
-                  >
-                    LIKE
-                  </div>
-                  <div className="">
-                    <TitleCard title={currentTitle} noTopMargin compactMobile truncateOverview />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-2xl p-1 sm:mt-4 sm:gap-3 sm:p-2">
-              <button
-                aria-label="Undo"
-                className="justify-self-start grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition-colors hover:bg-zinc-800/60 disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={handleUndoSwipe}
-                disabled={!lastSwipeSnapshot}
-              >
-                ↺
-              </button>
-              <div className="flex items-center justify-center gap-4 sm:gap-10">
-                <button
-                  aria-label="Pass"
-                  className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition-colors hover:bg-rose-800/55"
-                  onClick={() => handleSwipe("pass")}
-                >
-                  ✕
-                </button>
-                <button
-                  aria-label="Keep"
-                  className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition-colors hover:bg-emerald-800/60"
-                  onClick={() => handleSwipe("keep")}
-                >
-                  ♥
-                </button>
-              </div>
-              <button
-                aria-label="Share"
-                className="justify-self-end grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition-colors hover:bg-zinc-800/60"
-                onClick={handleShareCurrentTitle}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  style={{ display: "block", opacity: 0.92 }}
-                >
-                  <path
-                    fill="#fff"
-                    d="M14 3l7 7-7 7v-4.1c-5.2 0-8.8 1.7-11 5.1.6-6 3.9-10 11-10.9V3z"
-                  />
-                </svg>
-              </button>
-            </div>
-            {shareFeedback ? <p className="mt-1 text-center text-xs text-zinc-300">{shareFeedback}</p> : null}
-          </section>
-        )}
-
-        {session.phase === "showdown" && showdownLeft && showdownRight && (
-          <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
-            <h2 className="text-xl font-semibold">Final showdown</h2>
-            <p className="mt-2 text-sm text-zinc-300">Pick one. Use “Show more” for description and full details.</p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <ShowdownChoiceCard
-                title={showdownLeft}
-                onPick={() => handleShowdownPick("left")}
-                onShowMore={() => setShowdownDetailsTitle(showdownLeft)}
-              />
-              <ShowdownChoiceCard
-                title={showdownRight}
-                onPick={() => handleShowdownPick("right")}
-                onShowMore={() => setShowdownDetailsTitle(showdownRight)}
-              />
-            </div>
-          </section>
-        )}
-
-        {session.phase === "result" && winner && (
-          <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
-            <h2 className="text-xl font-semibold">Your pick tonight</h2>
-            <TitleCard title={winner} />
-            {backup ? <p className="mt-2 text-sm text-zinc-300">Backup option: {backup.name}</p> : null}
-            <div className="mt-4 flex gap-3">
-              <button
-                className="rounded-full border border-emerald-300/55 bg-emerald-900/45 px-4 py-2 text-sm transition hover:bg-emerald-800/55"
-                onClick={finalizeDecision}
-              >
-                Watch now
-              </button>
-              <button
-                className="rounded-full border border-white/30 bg-zinc-900/60 px-4 py-2 text-sm transition hover:border-white/50 hover:bg-zinc-800/75"
-                onClick={resetAndStartNewRound}
-              >
-                Pick another
-              </button>
-            </div>
-          </section>
-        )}
-
-        {showdownDetailsTitle ? (
-          <div
-            className="fixed inset-0 z-40 grid place-items-center bg-black/70 px-4"
-            onClick={() => setShowdownDetailsTitle(null)}
-          >
-            <div
-              className="w-full max-w-lg rounded-2xl border border-white/20 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur-xl"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className="text-lg font-semibold">
-                  {showdownDetailsTitle.name} ({showdownDetailsTitle.releaseYear})
-                </h3>
-                <button
-                  className="rounded-full border border-white/25 bg-zinc-800/70 px-2 py-1 text-sm transition hover:bg-zinc-700/80"
-                  onClick={() => setShowdownDetailsTitle(null)}
-                >
-                  Close
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-zinc-300">
-                {showdownDetailsTitle.type} {showdownDetailsTitle.runtimeMinutes}m
-                {typeof showdownDetailsTitle.rating === "number" ? ` - ${showdownDetailsTitle.rating.toFixed(1)}★` : ""}
-              </p>
-              <p className="mt-3 text-sm text-zinc-100">{showdownDetailsTitle.overview}</p>
-              <p className="mt-3 text-sm text-zinc-300">Genres: {showdownDetailsTitle.genres.join(", ")}</p>
-              {showdownDetailsTitle.cast?.length ? (
-                <p className="mt-1 text-sm text-zinc-300">Cast: {showdownDetailsTitle.cast.join(", ")}</p>
-              ) : null}
-            </div>
-          </div>
+        {session.phase === "questions" ? (
+          <QuestionsSection
+            hasSelectedQuickMode={hasSelectedQuickMode}
+            selectedQuickPresetLabel={selectedQuickPreset?.label}
+            answers={session.answers}
+            isBuildingDeck={isBuildingDeck}
+            customYearStartPct={customYearStartPct}
+            customYearEndPct={customYearEndPct}
+            onSelectQuickMode={selectQuickMode}
+            onResetQuickSetup={resetQuickSetup}
+            onUpdateAnswers={updateAnswers}
+            onToggleCustomYearRange={toggleCustomYearRange}
+            onUpdateCustomYearRange={updateCustomYearRange}
+            onToggleProvider={toggleProvider}
+            onToggleExclusion={toggleExclusion}
+            onStart={startSwipeRound}
+          />
         ) : null}
+
+        {session.phase === "swipe" && currentTitle ? (
+          <SwipeSection
+            currentTitle={currentTitle}
+            nextSwipeTitle={nextSwipeTitle}
+            deckCursor={session.deckCursor}
+            deckLength={session.deck.length}
+            shortlistLength={session.shortlist.length}
+            isDraggingCard={isDraggingCard}
+            swipeDeltaX={swipeDeltaX}
+            passOverlayOpacity={passOverlayOpacity}
+            keepOverlayOpacity={keepOverlayOpacity}
+            canUndo={canUndo}
+            shareFeedback={shareFeedback}
+            onPointerDown={onSwipePointerDown}
+            onPointerMove={onSwipePointerMove}
+            onPointerUp={onSwipePointerEnd}
+            onPointerCancel={onSwipePointerEnd}
+            onPass={() => handleSwipe("pass")}
+            onKeep={() => handleSwipe("keep")}
+            onUndo={handleUndoSwipe}
+            onShare={handleShareCurrentTitle}
+          />
+        ) : null}
+
+        {session.phase === "showdown" && showdownLeft && showdownRight ? (
+          <ShowdownSection
+            left={showdownLeft}
+            right={showdownRight}
+            onPickLeft={() => handleShowdownPick("left")}
+            onPickRight={() => handleShowdownPick("right")}
+            onShowMoreLeft={() => setShowdownDetailsTitle(showdownLeft)}
+            onShowMoreRight={() => setShowdownDetailsTitle(showdownRight)}
+          />
+        ) : null}
+
+        {session.phase === "result" && winner ? (
+          <ResultSection
+            winner={winner}
+            backup={backup}
+            onWatchNow={handleWatchNow}
+            onPickAnother={resetAndStartNewRound}
+          />
+        ) : null}
+
+        {showdownDetailsTitle ? <ShowdownDetailsModal title={showdownDetailsTitle} onClose={() => setShowdownDetailsTitle(null)} /> : null}
       </main>
     </div>
   );
