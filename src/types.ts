@@ -13,7 +13,7 @@ export interface OnboardingAnswers {
   language?: string | "any";
   releaseWindow?: "any" | "2020s" | "2010s" | "2000s" | "pre-2000";
   customYearRange?: { min: number; max: number } | null;
-  familiarity?: "any" | "popular" | "hidden-gems";
+  familiarity?: "any" | "popular" | "hidden-gems" | "for-kids";
   providers?: string[];
   hardExclusions?: string[];
   usePersonalization: boolean;

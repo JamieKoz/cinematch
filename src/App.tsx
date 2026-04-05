@@ -153,7 +153,7 @@ export function App() {
       </div>
       <div className="pointer-events-none fixed inset-0 z-10 bg-gradient-to-b from-black/40 via-black/55 to-black/80" />
 
-      <main className="relative z-20 mx-auto max-w-5xl px-3 py-3 text-zinc-100 sm:px-4 sm:py-5 md:py-10">
+      <main className="relative z-20 mx-auto max-w-5xl px-3 py-3 text-zinc-100 sm:px-4 sm:py-5 md:py-10 mb-16">
         <AppHeader onClearCache={handleResetPersonalization} />
 
         {session.phase === "questions" ? (

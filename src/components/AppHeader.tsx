@@ -4,7 +4,7 @@ export function AppHeader({ onClearCache }: { onClearCache: () => void }) {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">CineMatch</h1>
         <details className="group relative">
-          <summary className="list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70">
+          <summary className="summary-no-marker list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70">
             <span className="sr-only">Settings</span>
             <svg
               xmlns="http://www.w3.org/2000/svg"

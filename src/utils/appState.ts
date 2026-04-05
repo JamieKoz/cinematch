@@ -3,6 +3,7 @@ import type { OnboardingAnswers, SessionState, TasteProfile, Title, TitleType } 
 export function deriveSmartDefaultsFromProfile(profile: TasteProfile): Partial<OnboardingAnswers> {
   const defaults: Partial<OnboardingAnswers> = {
     language: "en",
+    runtime: "any",
     providers: [],
     releaseWindow: "any",
     customYearRange: null,

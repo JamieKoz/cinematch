@@ -5,7 +5,7 @@ export const PROVIDER_OPTIONS = ["netflix", "prime", "hulu", "max", "apple", "di
 export const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
 export const EXCLUSION_OPTIONS = ["horror", "crime", "romance", "drama", "action", "thriller", "comedy"];
 export const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;
-export const FAMILIARITY_OPTIONS = ["any", "popular", "hidden-gems"] as const;
+export const FAMILIARITY_OPTIONS = ["any", "popular", "hidden-gems", "for-kids"] as const;
 export const YEAR_MIN = 1900;
 export const YEAR_MAX = new Date().getFullYear();
 

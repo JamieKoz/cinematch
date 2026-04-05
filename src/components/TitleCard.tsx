@@ -17,18 +17,18 @@ export function TitleCard({
   const poster = tmdbPosterUrl(title.posterPath);
   const overviewStyle = truncateOverview
     ? {
-        display: "-webkit-box",
-        WebkitLineClamp: 3,
-        WebkitBoxOrient: "vertical" as const,
-        overflow: "hidden"
-      }
+      display: "-webkit-box",
+      WebkitLineClamp: 3,
+      WebkitBoxOrient: "vertical" as const,
+      overflow: "hidden"
+    }
     : undefined;
   return (
     <article
       className={
         compact
           ? `${noTopMargin ? "" : "mt-4 "}rounded-2xl bg-zinc-900/20 p-3`
-          : `${noTopMargin ? "" : "mt-4 "}rounded-2xl p-4`
+          : `${noTopMargin ? "" : "mt-4 "}rounded-2xl`
       }
     >
       <div

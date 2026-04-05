@@ -14,7 +14,6 @@ export function ResultSection({
 }) {
   return (
     <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
-      <h2 className="text-xl font-semibold">Your pick tonight</h2>
       <TitleCard title={winner} />
       {backup ? <p className="mt-2 text-sm text-zinc-300">Backup option: {backup.name}</p> : null}
       <div className="mt-4 flex gap-3">

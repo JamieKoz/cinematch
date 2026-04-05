@@ -1,5 +1,8 @@
 import type { OnboardingAnswers, RuntimeBucket, ScoreInput, TasteProfile, Title } from "../types";
 
+const KIDS_FRIENDLY_GENRES = new Set(["adventure", "comedy", "fantasy", "slice-of-life", "music"]);
+const KIDS_UNFRIENDLY_GENRES = new Set(["crime", "thriller", "horror", "mystery", "legal"]);
+
 export function runtimeBucketFromMinutes(minutes: number): RuntimeBucket {
   if (minutes < 90) return "short";
   if (minutes <= 130) return "standard";
@@ -84,6 +87,12 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
     score += title.popularity * 1.1;
   } else if (answers.familiarity === "hidden-gems") {
     score += (1 - title.popularity) * 1.1;
+  } else if (answers.familiarity === "for-kids") {
+    // Bias toward gentler genres and away from more mature/crime-heavy picks.
+    const friendlyMatches = title.genres.filter((genre) => KIDS_FRIENDLY_GENRES.has(genre)).length;
+    const unfriendlyMatches = title.genres.filter((genre) => KIDS_UNFRIENDLY_GENRES.has(genre)).length;
+    score += friendlyMatches * 1.4;
+    score -= unfriendlyMatches * 1.8;
   }
 
   return score;

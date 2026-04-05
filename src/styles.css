@@ -9,6 +9,14 @@ body {
   background: #09090d;
 }
 
+.summary-no-marker::-webkit-details-marker {
+  display: none;
+}
+
+.summary-no-marker::marker {
+  content: "";
+}
+
 .hero-tenor {
   position: fixed;
   inset: 0;

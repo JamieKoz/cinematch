@@ -50,7 +50,7 @@ export function QuestionsSection(props: {
 
   return (
     <>
-      <section className="p-5 shadow-2xl">
+      <section className="shadow-2xl">
         {!hasSelectedQuickMode ? (
           <div className="mt-4 grid gap-2">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -67,9 +67,9 @@ export function QuestionsSection(props: {
             </div>
           </div>
         ) : (
-          <div className="mt-4 flex flex-col items-start gap-2 rounded-xl sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 flex items-start gap-2 rounded-xl sm:flex-row items-center justify-between">
             <p className="text-xs text-zinc-300 sm:text-sm">
-              Selected quick mode: <span className="font-medium text-zinc-100">{selectedQuickPresetLabel ?? "Custom"}</span>
+              Selected mode: <span className="font-medium text-zinc-100">{selectedQuickPresetLabel ?? "Custom"}</span>
             </p>
             <button
               className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1 text-xs transition hover:border-white/45 hover:bg-zinc-800/70"
@@ -247,7 +247,9 @@ export function QuestionsSection(props: {
                         ? "Any"
                         : familiarity === "popular"
                           ? "Popular picks"
-                          : "Hidden gems"}
+                          : familiarity === "hidden-gems"
+                            ? "Hidden gems"
+                            : "For kids"}
                     </button>
                   );
                 })}
@@ -315,7 +317,7 @@ export function QuestionsSection(props: {
       {hasSelectedQuickMode ? (
         <div className="mt-5 flex justify-center">
           <button
-            className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 disabled:opacity-70"
+            className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-2.5 font-medium text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 disabled:opacity-70"
             onClick={onStart}
             disabled={isBuildingDeck}
           >
