@@ -2,6 +2,7 @@ import type { Title } from "../types";
 import { loadBackendConfig } from "./backendConfig";
 import { fetchWithTimeoutAndRetries } from "./aiFetch";
 import {
+  extractMessageTextContent,
   parseGeneratePayload,
   parseRerankPayload,
   safeParseJson,
@@ -88,7 +89,7 @@ async function tryRerankWithModel(input: ModelAttempt): Promise<string[]> {
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const content = data.choices?.[0]?.message?.content;
+    const content = extractMessageTextContent(data.choices?.[0]?.message?.content);
     if (!content) {
       console.warn(`${AI_LOG} rerank empty content model=${input.model}`);
       return [];
@@ -147,7 +148,7 @@ async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSugg
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const content = data.choices?.[0]?.message?.content;
+    const content = extractMessageTextContent(data.choices?.[0]?.message?.content);
     if (!content) {
       console.warn(`${AI_LOG} generate empty content model=${input.model}`);
       return [];

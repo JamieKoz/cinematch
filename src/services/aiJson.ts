@@ -1,5 +1,24 @@
 import type { AiSuggestedTitle } from "./aiTypes";
 
+/** OpenAI `message.content` is usually a string; some models return content parts instead. */
+export function extractMessageTextContent(content: unknown): string | null {
+  if (typeof content === "string") {
+    const t = content.trim();
+    return t.length ? t : null;
+  }
+  if (!Array.isArray(content)) return null;
+  const parts: string[] = [];
+  for (const item of content) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (typeof rec.text === "string" && rec.text.trim()) {
+      parts.push(rec.text);
+    }
+  }
+  const joined = parts.join("").trim();
+  return joined.length ? joined : null;
+}
+
 export function safeParseJson(content: string): unknown | null {
   const stripped = stripCodeFence(content.trim());
   try {

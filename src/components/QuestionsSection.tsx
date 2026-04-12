@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { DeckBuildingOverlay } from "./DeckBuildingOverlay";
 import {
   EXCLUSION_OPTIONS,
   FAMILIARITY_OPTIONS,
@@ -88,7 +89,7 @@ export function QuestionsSection(props: {
             </div>
           </div>
         ) : (
-          <div className="mt-4 flex items-start gap-2 rounded-xl sm:flex-row items-center justify-between">
+          <div className="mt-4 flex items-start gap-2 rounded-xl sm:flex-row items-center justify-between onboarding-reveal onboarding-reveal-d0">
             <p className="text-xs text-zinc-300 sm:text-sm">
               Selected mode: <span className="font-medium text-zinc-100">{selectedQuickPresetLabel ?? "Custom"}</span>
             </p>
@@ -102,8 +103,8 @@ export function QuestionsSection(props: {
         )}
 
         {hasSelectedQuickMode ? (
-          <>
-            <div className="mt-4 grid gap-2">
+          <Fragment key={answers.quickModeId}>
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d1">
               <label className="text-sm text-zinc-200">Mood</label>
               <div className="flex flex-wrap gap-2">
                 {MOOD_OPTIONS.map((mood) => (
@@ -122,7 +123,7 @@ export function QuestionsSection(props: {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d2">
               <label className="text-sm text-zinc-200">Type</label>
               <select
                 className="w-full sm:w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
@@ -135,7 +136,7 @@ export function QuestionsSection(props: {
               </select>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d3">
               <label className="text-sm text-zinc-200">Runtime</label>
               <select
                 className="w-full sm:w-56 rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md"
@@ -149,7 +150,7 @@ export function QuestionsSection(props: {
               </select>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d4">
               <label className="text-sm text-zinc-200">Release style</label>
               <div className="flex flex-wrap gap-2">
                 {RELEASE_WINDOW_OPTIONS.map((window) => {
@@ -227,7 +228,7 @@ export function QuestionsSection(props: {
               ) : null}
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d5">
               <label className="text-sm text-zinc-200">Language</label>
               <div className="flex flex-wrap gap-2">
                 {LANGUAGE_OPTIONS.map((language) => {
@@ -249,7 +250,7 @@ export function QuestionsSection(props: {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d6">
               <label className="text-sm text-zinc-200">Discovery style</label>
               <div className="flex flex-wrap gap-2">
                 {FAMILIARITY_OPTIONS.map((familiarity) => {
@@ -277,7 +278,7 @@ export function QuestionsSection(props: {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d7">
               <label className="text-sm text-zinc-200">Provider</label>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -309,7 +310,7 @@ export function QuestionsSection(props: {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d8">
               <label className="text-sm text-zinc-200">Avoid tonight</label>
               <div className="flex flex-wrap gap-2">
                 {EXCLUSION_OPTIONS.map((exclusion) => {
@@ -331,7 +332,7 @@ export function QuestionsSection(props: {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d9">
               <label className="text-sm text-zinc-200">Keywords (optional)</label>
               <input
                 className="w-full rounded-xl border border-white/25 bg-zinc-900/75 px-3 py-2 text-sm text-zinc-100 outline-none backdrop-blur-md placeholder:text-zinc-400"
@@ -348,22 +349,24 @@ export function QuestionsSection(props: {
                 placeholder="animation, black and white, slasher"
               />
             </div>
-          </>
+          </Fragment>
         ) : (
           <p className="mt-4 text-sm text-zinc-300"></p>
         )}
       </section>
       {hasSelectedQuickMode ? (
-        <div className="mt-5 flex justify-center">
+        <div className="mt-5 flex justify-center onboarding-reveal onboarding-reveal-d10">
           <button
             className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-2.5 font-medium text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 disabled:opacity-70"
             onClick={onStart}
             disabled={isBuildingDeck}
           >
-            {isBuildingDeck ? "Building your deck..." : "Start"}
+            {isBuildingDeck ? "Building your deck…" : "Start"}
           </button>
         </div>
       ) : null}
+
+      {isBuildingDeck ? <DeckBuildingOverlay /> : null}
     </>
   );
 }

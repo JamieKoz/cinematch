@@ -7,7 +7,7 @@ import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "../services/a
 import { saveLastAnswers } from "../services/storage";
 import { loadBackendConfig } from "../services/backendConfig";
 import { enrichTitlesWithTmdb, resolveAiSuggestionsToTitles } from "../services/tmdb";
-import { buildDeck, createSession } from "../state/machine";
+import { buildDeck, createSession, fillDeckFromSources } from "../state/machine";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
 import { cloneProfile, cloneSession, mergeCatalog, slugify } from "../utils/appState";
 
@@ -113,9 +113,11 @@ export function useSessionFlow(params: {
 
       if (deckTitles.length > 0) setCatalog((prev) => mergeCatalog(prev, deckTitles));
 
-      const ids = deckTitles.map((title) => title.id);
-      const fallback = buildDeck(catalog, session.answers, profile);
-      const deck = ids.length ? ids : fallback;
+      const catalogForDeck = deckTitles.length > 0 ? mergeCatalog(catalog, deckTitles) : catalog;
+      const primaryIds = deckTitles.map((title) => title.id);
+      const fallbackIds = buildDeck(catalogForDeck, session.answers, profile);
+      const deck =
+        primaryIds.length > 0 ? fillDeckFromSources(primaryIds, fallbackIds) : fallbackIds;
 
       setSession((prev) => ({
         ...prev,

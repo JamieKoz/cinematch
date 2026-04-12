@@ -2,7 +2,29 @@ import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { rankTitles } from "../engine/scoring";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
 
-const DECK_SIZE = 10;
+export const DECK_SIZE = 10;
+
+/** Prefer primary order (e.g. AI matches); fill to `size` from fallback without duplicates. */
+export function fillDeckFromSources(primaryIds: string[], fallbackIds: string[], size = DECK_SIZE): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  function pushUnique(id: string) {
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push(id);
+  }
+
+  for (const id of primaryIds) {
+    pushUnique(id);
+    if (out.length >= size) return out;
+  }
+  for (const id of fallbackIds) {
+    pushUnique(id);
+    if (out.length >= size) return out;
+  }
+  return out;
+}
 
 export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): OnboardingAnswers {
   const legacySeed = seed as Partial<OnboardingAnswers> & {

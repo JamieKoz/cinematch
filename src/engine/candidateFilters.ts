@@ -1,6 +1,19 @@
 import type { OnboardingAnswers, TasteProfile, Title } from "../types";
 import { runtimeBucketFromMinutes } from "./scoring";
 
+/** For AI-curated picks: honor hard genre exclusions and movie/series preference only (release/runtime/provider already inform the model). */
+export function passesAiDeckConstraints(title: Title, answers: OnboardingAnswers): boolean {
+  if (answers.hardExclusions?.length) {
+    if (title.genres.some((genre) => answers.hardExclusions?.includes(genre))) return false;
+  }
+
+  if (answers.preferredType && answers.preferredType !== "either" && title.type !== answers.preferredType) {
+    return false;
+  }
+
+  return true;
+}
+
 export function passesCandidateConstraints(title: Title, answers: OnboardingAnswers): boolean {
   if (answers.hardExclusions?.length) {
     if (title.genres.some((genre) => answers.hardExclusions?.includes(genre))) return false;

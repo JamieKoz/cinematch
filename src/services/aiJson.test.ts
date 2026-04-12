@@ -1,10 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractMessageTextContent,
   parseGeneratePayload,
   parseRerankPayload,
   safeParseJson,
   validateRerankPermutation
 } from "./aiJson";
+
+describe("extractMessageTextContent", () => {
+  it("accepts plain string content", () => {
+    expect(extractMessageTextContent('  {"a":1}  ')).toBe('{"a":1}');
+  });
+
+  it("joins OpenAI-style content parts", () => {
+    expect(
+      extractMessageTextContent([{ type: "text", text: '{"suggestions":' }, { type: "text", text: '[]}' }])
+    ).toBe('{"suggestions":[]}');
+  });
+
+  it("returns null for empty or unknown shapes", () => {
+    expect(extractMessageTextContent("")).toBeNull();
+    expect(extractMessageTextContent(null)).toBeNull();
+    expect(extractMessageTextContent([{ type: "image_url" }])).toBeNull();
+  });
+});
 
 describe("safeParseJson", () => {
   it("parses normal JSON", () => {

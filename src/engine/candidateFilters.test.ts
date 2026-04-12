@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultProfile } from "./profile";
-import { passesCandidateConstraints, prepareSwipeCandidatePool } from "./candidateFilters";
+import { passesAiDeckConstraints, passesCandidateConstraints, prepareSwipeCandidatePool } from "./candidateFilters";
 import { createInitialAnswers } from "../state/machine";
 import type { Title } from "../types";
 
@@ -20,6 +20,21 @@ function title(overrides: Partial<Title> = {}): Title {
     ...overrides
   };
 }
+
+describe("passesAiDeckConstraints", () => {
+  it("ignores release window that full candidate checks use", () => {
+    const answers = createInitialAnswers({ releaseWindow: "2020s" });
+    expect(passesAiDeckConstraints(title({ releaseYear: 1999 }), answers)).toBe(true);
+    expect(passesCandidateConstraints(title({ releaseYear: 1999 }), answers)).toBe(false);
+  });
+
+  it("still blocks hard exclusion genres and preferred type", () => {
+    const ex = createInitialAnswers({ hardExclusions: ["horror"] });
+    expect(passesAiDeckConstraints(title({ genres: ["horror"] }), ex)).toBe(false);
+    const typeAns = createInitialAnswers({ preferredType: "movie" });
+    expect(passesAiDeckConstraints(title({ type: "series" }), typeAns)).toBe(false);
+  });
+});
 
 describe("passesCandidateConstraints", () => {
   it("blocks hardExclusions genres", () => {

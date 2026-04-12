@@ -80,3 +80,199 @@ body {
   pointer-events: auto;
   cursor: pointer;
 }
+
+@keyframes deck-float-only {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes deck-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes deck-spin-soft {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes swipe-deck-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes onboarding-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onboarding-reveal {
+  animation: onboarding-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.onboarding-reveal-d0 {
+  animation-delay: 0s;
+}
+.onboarding-reveal-d1 {
+  animation-delay: 0.055s;
+}
+.onboarding-reveal-d2 {
+  animation-delay: 0.11s;
+}
+.onboarding-reveal-d3 {
+  animation-delay: 0.165s;
+}
+.onboarding-reveal-d4 {
+  animation-delay: 0.22s;
+}
+.onboarding-reveal-d5 {
+  animation-delay: 0.275s;
+}
+.onboarding-reveal-d6 {
+  animation-delay: 0.33s;
+}
+.onboarding-reveal-d7 {
+  animation-delay: 0.385s;
+}
+.onboarding-reveal-d8 {
+  animation-delay: 0.44s;
+}
+.onboarding-reveal-d9 {
+  animation-delay: 0.495s;
+}
+.onboarding-reveal-d10 {
+  animation-delay: 0.55s;
+}
+
+.deck-building-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(39, 39, 42, 0.35) 0%,
+    rgba(91, 33, 182, 0.22) 45%,
+    rgba(39, 39, 42, 0.35) 100%
+  );
+  background-size: 220% 100%;
+  animation: deck-shimmer 1.35s ease-in-out infinite;
+}
+
+.deck-building-card-stack .deck-building-card-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.deck-building-card-stack .deck-building-card-wrap:nth-child(1) {
+  transform: translate(10px, 6px) rotate(8deg);
+  z-index: 1;
+}
+
+.deck-building-card-stack .deck-building-card-wrap:nth-child(2) {
+  transform: translate(-8px, 4px) rotate(-6deg);
+  z-index: 2;
+}
+
+.deck-building-card-stack .deck-building-card-wrap:nth-child(3) {
+  transform: translate(0, 0) rotate(0deg);
+  z-index: 3;
+}
+
+.deck-building-card-stack .deck-building-card-inner {
+  height: 100%;
+  animation: deck-float-only 2.4s ease-in-out infinite;
+}
+
+.deck-building-card-stack .deck-building-card-wrap:nth-child(1) .deck-building-card-inner {
+  animation-delay: 0s;
+}
+
+.deck-building-card-stack .deck-building-card-wrap:nth-child(2) .deck-building-card-inner {
+  animation-delay: 0.12s;
+}
+
+.deck-building-card-stack .deck-building-card-wrap:nth-child(3) .deck-building-card-inner {
+  animation-delay: 0.24s;
+}
+
+.deck-building-spinner {
+  animation: deck-spin-soft 0.85s linear infinite;
+}
+
+.swipe-deck-enter {
+  animation: swipe-deck-enter 0.58s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.swipe-deck-enter-delay-1 {
+  animation-delay: 0.07s;
+}
+
+.swipe-deck-enter-delay-2 {
+  animation-delay: 0.14s;
+}
+
+.swipe-deck-enter-delay-3 {
+  animation-delay: 0.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-building-skeleton {
+    animation: none;
+    background-position: 50% 0;
+  }
+
+  .deck-building-card-stack .deck-building-card-inner {
+    animation: none;
+  }
+
+  .deck-building-spinner {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .swipe-deck-enter,
+  .swipe-deck-enter-delay-1,
+  .swipe-deck-enter-delay-2,
+  .swipe-deck-enter-delay-3 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
+  .onboarding-reveal,
+  .onboarding-reveal-d0,
+  .onboarding-reveal-d1,
+  .onboarding-reveal-d2,
+  .onboarding-reveal-d3,
+  .onboarding-reveal-d4,
+  .onboarding-reveal-d5,
+  .onboarding-reveal-d6,
+  .onboarding-reveal-d7,
+  .onboarding-reveal-d8,
+  .onboarding-reveal-d9,
+  .onboarding-reveal-d10 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
