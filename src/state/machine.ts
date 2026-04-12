@@ -1,3 +1,4 @@
+import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { rankTitles } from "../engine/scoring";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
 
@@ -41,7 +42,9 @@ export function createSession(answers: OnboardingAnswers): SessionState {
 
 export function buildDeck(titles: Title[], answers: OnboardingAnswers, profile: TasteProfile): string[] {
   const activeProfile = answers.usePersonalization ? profile : clearProfileAffinity(profile);
-  return rankTitles(titles, answers, activeProfile)
+  const pool = prepareSwipeCandidatePool(titles, answers, activeProfile);
+  const source = pool.length > 0 ? pool : titles;
+  return rankTitles(source, answers, activeProfile)
     .slice(0, DECK_SIZE)
     .map((title) => title.id);
 }

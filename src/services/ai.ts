@@ -1,25 +1,19 @@
-import type { OnboardingAnswers, TasteProfile, Title } from "../types";
+import type { Title } from "../types";
 import { loadBackendConfig } from "./backendConfig";
+import { fetchWithTimeoutAndRetries } from "./aiFetch";
+import {
+  parseGeneratePayload,
+  parseRerankPayload,
+  safeParseJson,
+  validateRerankPermutation
+} from "./aiJson";
+import { buildGeneratePrompt, buildRerankPrompt } from "./aiPrompts";
+import type { AiGenerateRequest, AiRerankRequest, AiSuggestedTitle } from "./aiTypes";
+
+export type { AiGenerateRequest, AiHistoryHints, AiRerankRequest, AiSuggestedTitle } from "./aiTypes";
 
 const OPENAI_COMPLETIONS_URL = "/api/openai/chat/completions";
-
-export interface AiRerankRequest {
-  answers: OnboardingAnswers;
-  profile: TasteProfile;
-  candidates: Title[];
-}
-
-export interface AiGenerateRequest {
-  answers: OnboardingAnswers;
-  profile: TasteProfile;
-  count: number;
-}
-
-export interface AiSuggestedTitle {
-  name: string;
-  type: "movie" | "series";
-  reason?: string;
-}
+const AI_LOG = "[cinematch-ai]";
 
 export async function rerankCandidatesWithAi(req: AiRerankRequest): Promise<Title[]> {
   const config = await getAiRuntime();
@@ -32,6 +26,7 @@ export async function rerankCandidatesWithAi(req: AiRerankRequest): Promise<Titl
     }
   }
 
+  console.warn(`${AI_LOG} rerank exhausted models; using score order`);
   return req.candidates;
 }
 
@@ -42,9 +37,15 @@ export async function generateSuggestionsWithAi(req: AiGenerateRequest): Promise
   for (const model of config.models) {
     const suggestions = await tryGenerateWithModel({ ...req, model });
     if (suggestions.length >= req.count) return suggestions.slice(0, req.count);
-    if (suggestions.length > 0) return suggestions;
+    if (suggestions.length > 0) {
+      console.warn(
+        `${AI_LOG} model ${model} returned ${suggestions.length}/${req.count} suggestions; using partial batch`
+      );
+      return suggestions;
+    }
   }
 
+  console.warn(`${AI_LOG} generate produced no usable suggestions`);
   return [];
 }
 
@@ -58,159 +59,111 @@ interface GenerateModelAttempt extends AiGenerateRequest {
 
 async function tryRerankWithModel(input: ModelAttempt): Promise<string[]> {
   const prompt = buildRerankPrompt(input);
+  const body = {
+    model: input.model,
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a recommendation ranker. Return strict JSON only in the shape {\"orderedIds\":[...]} with every candidate id exactly once."
+      },
+      { role: "user", content: prompt }
+    ]
+  };
 
   try {
-    const response = await fetch(OPENAI_COMPLETIONS_URL, {
+    const response = await fetchWithTimeoutAndRetries(OPENAI_COMPLETIONS_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: input.model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a recommendation ranker. Return strict JSON only in the shape {\"orderedIds\":[...]}."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
     });
 
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.warn(`${AI_LOG} rerank HTTP ${response.status} model=${input.model}`);
+      return [];
+    }
 
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = data.choices?.[0]?.message?.content;
-    if (!content) return [];
+    if (!content) {
+      console.warn(`${AI_LOG} rerank empty content model=${input.model}`);
+      return [];
+    }
 
-    const parsed = safeParseJson(content) as { orderedIds?: string[] } | null;
-    return parsed?.orderedIds ?? [];
-  } catch {
+    const parsed = safeParseJson(content);
+    const payload = parseRerankPayload(parsed);
+    if (!payload) {
+      console.warn(`${AI_LOG} rerank JSON shape invalid model=${input.model}`);
+      return [];
+    }
+
+    const validated = validateRerankPermutation(payload.orderedIds, input.candidates);
+    if (!validated) {
+      console.warn(
+        `${AI_LOG} rerank orderedIds not a permutation of candidates (count=${input.candidates.length}) model=${input.model}`
+      );
+      return [];
+    }
+
+    return validated;
+  } catch (error) {
+    console.warn(`${AI_LOG} rerank failed model=${input.model}`, error);
     return [];
   }
 }
 
 async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSuggestedTitle[]> {
   const prompt = buildGeneratePrompt(input);
+  const body = {
+    model: input.model,
+    temperature: 0.4,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You recommend watchable titles. Return strict JSON only in the shape {\"suggestions\":[{\"name\":\"\",\"type\":\"movie|series\",\"reason\":\"\"}]}"
+      },
+      { role: "user", content: prompt }
+    ]
+  };
 
   try {
-    const response = await fetch(OPENAI_COMPLETIONS_URL, {
+    const response = await fetchWithTimeoutAndRetries(OPENAI_COMPLETIONS_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: input.model,
-        temperature: 0.4,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You recommend watchable titles. Return strict JSON only in the shape {\"suggestions\":[{\"name\":\"\",\"type\":\"movie|series\",\"reason\":\"\"}]}"
-          },
-          { role: "user", content: prompt }
-        ]
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
     });
 
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.warn(`${AI_LOG} generate HTTP ${response.status} model=${input.model}`);
+      return [];
+    }
 
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = data.choices?.[0]?.message?.content;
-    if (!content) return [];
+    if (!content) {
+      console.warn(`${AI_LOG} generate empty content model=${input.model}`);
+      return [];
+    }
 
-    const parsed = safeParseJson(content) as { suggestions?: AiSuggestedTitle[] } | null;
-    const suggestions = parsed?.suggestions ?? [];
-    return normalizeSuggestions(suggestions, input.count);
-  } catch {
+    const parsed = safeParseJson(content);
+    const structured = parseGeneratePayload(parsed);
+    if (!structured) {
+      console.warn(`${AI_LOG} generate JSON shape invalid model=${input.model}`);
+      return [];
+    }
+
+    return normalizeSuggestions(structured, input.count);
+  } catch (error) {
+    console.warn(`${AI_LOG} generate failed model=${input.model}`, error);
     return [];
-  }
-}
-
-function buildRerankPrompt(req: AiRerankRequest): string {
-  const compactCandidates = req.candidates.map((title) => ({
-    id: title.id,
-    name: title.name,
-    type: title.type,
-    runtimeMinutes: title.runtimeMinutes,
-    genres: title.genres,
-    moods: title.moods,
-    language: title.language,
-    providers: title.providers
-  }));
-
-  return JSON.stringify({
-    task: "Re-rank candidates based on user intent and preference signals.",
-    rules: [
-      "Keep items that match explicit answers highest.",
-      "Use profile affinities as secondary signals.",
-      "Prefer diverse top picks but still relevance-first.",
-      "Return all candidate ids exactly once."
-    ],
-    answers: req.answers,
-    profile: {
-      genreAffinity: req.profile.genreAffinity,
-      moodAffinity: req.profile.moodAffinity,
-      runtimeAffinity: req.profile.runtimeAffinity,
-      typeAffinity: req.profile.typeAffinity,
-      languageAffinity: req.profile.languageAffinity,
-      providerAffinity: req.profile.providerAffinity
-    },
-    candidates: compactCandidates,
-    requiredOutput: { orderedIds: compactCandidates.map((title) => title.id) }
-  });
-}
-
-function buildGeneratePrompt(req: AiGenerateRequest): string {
-  return JSON.stringify({
-    task: "Suggest titles the user is likely to choose now.",
-    constraints: [
-      `Return exactly ${req.count} suggestions if possible.`,
-      "Use real well-known titles that can be found in TMDB.",
-      "Do not include duplicates.",
-      "Respect preferred type if user set one."
-    ],
-    answers: req.answers,
-    profileSignals: {
-      genreAffinity: req.profile.genreAffinity,
-      moodAffinity: req.profile.moodAffinity,
-      runtimeAffinity: req.profile.runtimeAffinity,
-      typeAffinity: req.profile.typeAffinity,
-      languageAffinity: req.profile.languageAffinity
-    },
-    outputShape: {
-      suggestions: [
-        { name: "string", type: "movie|series", reason: "short reason" }
-      ]
-    }
-  });
-}
-
-function safeParseJson(content: string): unknown | null {
-  try {
-    return JSON.parse(content);
-  } catch {
-    const start = content.indexOf("{");
-    const end = content.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(content.slice(start, end + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
   }
 }
 
@@ -234,10 +187,7 @@ function normalizeSuggestions(suggestions: AiSuggestedTitle[], count: number): A
 
 function mapIdsToCandidates(orderedIds: string[], candidates: Title[]): Title[] {
   const map = new Map(candidates.map((title) => [title.id, title]));
-  const dedupedIds = Array.from(new Set(orderedIds)).filter((id) => map.has(id));
-  const missing = candidates.filter((title) => !dedupedIds.includes(title.id)).map((title) => title.id);
-  const finalIds = [...dedupedIds, ...missing];
-  return finalIds.map((id) => map.get(id)).filter((title): title is Title => Boolean(title));
+  return orderedIds.map((id) => map.get(id)).filter((title): title is Title => Boolean(title));
 }
 
 interface AiRuntime {

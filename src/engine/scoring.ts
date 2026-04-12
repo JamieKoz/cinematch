@@ -13,6 +13,11 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
   let score = 0;
 
   if (profile.rejectedIds.includes(title.id)) return -9999;
+
+  if (profile.likedIds.includes(title.id)) {
+    score += 1.4;
+  }
+
   if (answers.hardExclusions?.length) {
     const excluded = title.genres.some((genre) => answers.hardExclusions?.includes(genre));
     if (excluded) return -9999;

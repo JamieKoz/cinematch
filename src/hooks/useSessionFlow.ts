@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultProfile } from "../engine/profile";
 import { rankTitles } from "../engine/scoring";
+import type { AiHistoryHints } from "../services/ai";
 import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "../services/ai";
 import { saveLastAnswers } from "../services/storage";
 import { loadBackendConfig } from "../services/backendConfig";
-import { enrichTitlesWithTmdb } from "../services/tmdb";
+import { enrichTitlesWithTmdb, resolveAiSuggestionsToTitles } from "../services/tmdb";
 import { buildDeck, createSession } from "../state/machine";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
 import { cloneProfile, cloneSession, mergeCatalog, slugify } from "../utils/appState";
@@ -37,6 +39,23 @@ export function useSessionFlow(params: {
   const [isBuildingDeck, setIsBuildingDeck] = useState(false);
   const [lastSwipeSnapshot, setLastSwipeSnapshot] = useState<{ session: SessionState; profile: TasteProfile } | null>(null);
 
+  function buildHistoryHints(): AiHistoryHints {
+    const byId = new Map(catalog.map((title) => [title.id, title]));
+    const namesFrom = (ids: string[], cap: number) =>
+      ids
+        .slice(-cap)
+        .map((id) => byId.get(id)?.name)
+        .filter((name): name is string => Boolean(name));
+
+    return {
+      likedSample: namesFrom(profile.likedIds, 14),
+      rejectedSample: namesFrom(profile.rejectedIds, 10),
+      seenSample: namesFrom(profile.seenIds, 10),
+      lastChosenLabel: profile.lastChosenTitle ? byId.get(profile.lastChosenTitle)?.name : undefined,
+      sessionCount: profile.sessionCount
+    };
+  }
+
   async function startSwipeRound() {
     setIsBuildingDeck(true);
     setLastSwipeSnapshot(null);
@@ -47,36 +66,47 @@ export function useSessionFlow(params: {
       let deckTitles: Title[] = [];
 
       if (aiEnabled) {
+        const historyHints = buildHistoryHints();
         const generated = await generateSuggestionsWithAi({
           answers: session.answers,
           profile,
-          count: 10
+          count: 10,
+          historyHints
         });
 
         if (generated.length > 0) {
-          const generatedTitles: Title[] = generated.map((item, index) => ({
-            id: `ai-${index}-${slugify(item.name)}`,
-            name: item.name,
-            type: item.type,
-            runtimeMinutes: item.type === "series" ? 45 : 110,
-            genres: [],
-            moods: [...(session.answers.moods ?? [])],
-            language: session.answers.languages?.[0] ?? "en",
-            providers: [...(session.answers.providers ?? [])],
-            popularity: 0.6,
-            releaseYear: new Date().getFullYear(),
-            posterPath: null,
-            overview: item.reason ?? "AI-picked for your current vibe."
-          }));
-
-          deckTitles = tmdbEnabled ? await enrichTitlesWithTmdb(generatedTitles) : generatedTitles;
+          if (tmdbEnabled) {
+            deckTitles = await resolveAiSuggestionsToTitles(generated, session.answers, profile, 10);
+          } else {
+            deckTitles = generated.map((item, index) => ({
+              id: `ai-${index}-${slugify(item.name)}`,
+              name: item.name,
+              type: item.type,
+              runtimeMinutes: item.type === "series" ? 45 : 110,
+              genres: [],
+              moods: [...(session.answers.moods ?? [])],
+              language: session.answers.languages?.[0] ?? "en",
+              providers: [...(session.answers.providers ?? [])],
+              popularity: 0.6,
+              releaseYear: new Date().getFullYear(),
+              posterPath: null,
+              overview: item.reason ?? "AI-picked for your current vibe."
+            }));
+          }
         }
       }
 
       if (deckTitles.length === 0) {
-        const sorted = rankTitles(catalog, session.answers, session.answers.usePersonalization ? profile : createDefaultProfile());
+        const activeProfile = session.answers.usePersonalization ? profile : createDefaultProfile();
+        const pool = prepareSwipeCandidatePool(catalog, session.answers, activeProfile);
+        const sorted = rankTitles(pool.length ? pool : catalog, session.answers, activeProfile);
         const top20 = sorted.slice(0, 20);
-        const reranked = await rerankCandidatesWithAi({ answers: session.answers, profile, candidates: top20 });
+        const reranked = await rerankCandidatesWithAi({
+          answers: session.answers,
+          profile: activeProfile,
+          candidates: top20,
+          historyHints: buildHistoryHints()
+        });
         const baseDeckTitles = (reranked.length ? reranked : top20).slice(0, 10);
         deckTitles = tmdbEnabled ? await enrichTitlesWithTmdb(baseDeckTitles) : baseDeckTitles;
       }

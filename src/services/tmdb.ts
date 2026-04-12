@@ -1,4 +1,6 @@
-import type { Title } from "../types";
+import { passesCandidateConstraints } from "../engine/candidateFilters";
+import type { OnboardingAnswers, TasteProfile, Title, TitleType } from "../types";
+import type { AiSuggestedTitle } from "./aiTypes";
 
 export function tmdbPosterUrl(posterPath: string | null | undefined, size: "w342" | "w500" = "w500"): string | null {
   if (!posterPath) return null;
@@ -66,6 +68,77 @@ export async function enrichTitlesWithTmdb(titles: Title[]): Promise<Title[]> {
   );
 
   return enriched;
+}
+
+export function strictSearchMatch(results: TmdbSearchResult[], titleName: string, type: TitleType): TmdbSearchResult | null {
+  if (results.length === 0) return null;
+  const expectedMediaType = type === "series" ? "tv" : "movie";
+  const filtered = results.filter((result) => result.media_type === "movie" || result.media_type === "tv");
+  if (filtered.length === 0) return null;
+  const normalizedTarget = normalize(titleName);
+
+  const exact = filtered.find((result) => {
+    const candidateName = result.title ?? result.name ?? "";
+    return result.media_type === expectedMediaType && normalize(candidateName) === normalizedTarget;
+  });
+  return exact ?? null;
+}
+
+export async function resolveAiSuggestionsToTitles(
+  suggestions: AiSuggestedTitle[],
+  answers: OnboardingAnswers,
+  profile: TasteProfile,
+  max: number
+): Promise<Title[]> {
+  if (suggestions.length === 0) return [];
+  const genreLookup = await getGenreLookup();
+  const used = new Set<string>();
+  const resolved: Title[] = [];
+
+  for (const suggestion of suggestions) {
+    if (resolved.length >= max) break;
+    const results = await searchTmdbTitle(suggestion.name);
+    const match = strictSearchMatch(results, suggestion.name, suggestion.type);
+    if (!match || (match.media_type !== "movie" && match.media_type !== "tv")) continue;
+
+    const media = match.media_type;
+    const id = `tmdb-${media}-${match.id}`;
+    if (used.has(id)) continue;
+
+    if (profile.rejectedIds.includes(id) || profile.seenIds.includes(id)) continue;
+
+    const details = await fetchTmdbDetails(media, match.id);
+    const year = parseYear(match.release_date ?? match.first_air_date);
+    const genresFromSearch = (match.genre_ids ?? []).map((gid) => genreLookup.get(gid)).filter((name): name is string => Boolean(name));
+    const genres = details?.genres?.length ? details.genres : genresFromSearch;
+    const resolvedType: TitleType = media === "tv" ? "series" : "movie";
+    const runtimeMinutes = details?.runtimeMinutes ?? (resolvedType === "series" ? 45 : 110);
+    const displayName = (match.title ?? match.name ?? suggestion.name).trim();
+
+    const title: Title = {
+      id,
+      name: displayName,
+      type: resolvedType,
+      runtimeMinutes: runtimeMinutes ?? (resolvedType === "series" ? 45 : 110),
+      genres: genres.length ? genres : [],
+      moods: [...(answers.moods ?? [])],
+      language: answers.languages?.[0] ?? "en",
+      providers: [...(answers.providers ?? [])],
+      popularity: typeof match.vote_average === "number" ? Math.min(1, match.vote_average / 10) : 0.55,
+      releaseYear: year ?? new Date().getFullYear(),
+      posterPath: match.poster_path ?? null,
+      overview: details?.overview?.trim() || match.overview?.trim() || suggestion.reason?.trim() || "",
+      rating: details?.voteAverage ?? match.vote_average,
+      cast: details?.cast
+    };
+
+    if (!passesCandidateConstraints(title, answers)) continue;
+
+    used.add(id);
+    resolved.push(title);
+  }
+
+  return resolved;
 }
 
 function findBestMatch(results: TmdbSearchResult[], title: Title): TmdbSearchResult | null {
