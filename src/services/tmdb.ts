@@ -18,16 +18,12 @@ export interface TmdbSearchResult {
   vote_average?: number;
 }
 
-const API_BASE = "https://api.themoviedb.org/3";
+const API_BASE = "/api/tmdb/3";
 let genreLookupPromise: Promise<Map<number, string>> | null = null;
 
 export async function searchTmdbTitle(query: string): Promise<TmdbSearchResult[]> {
-  const token = import.meta.env.VITE_TMDB_READ_ACCESS_TOKEN as string | undefined;
-  if (!token) return [];
-
   const response = await fetch(`${API_BASE}/search/multi?query=${encodeURIComponent(query)}&include_adult=false`, {
     headers: {
-      Authorization: `Bearer ${token}`,
       accept: "application/json"
     }
   });
@@ -39,9 +35,8 @@ export async function searchTmdbTitle(query: string): Promise<TmdbSearchResult[]
 }
 
 export async function enrichTitlesWithTmdb(titles: Title[]): Promise<Title[]> {
-  const token = import.meta.env.VITE_TMDB_READ_ACCESS_TOKEN as string | undefined;
-  if (!token || titles.length === 0) return titles;
-  const genreLookup = await getGenreLookup(token);
+  if (titles.length === 0) return titles;
+  const genreLookup = await getGenreLookup();
 
   const enriched = await Promise.all(
     titles.map(async (title) => {
@@ -50,7 +45,7 @@ export async function enrichTitlesWithTmdb(titles: Title[]): Promise<Title[]> {
       if (!best) return title;
 
       const year = parseYear(best.release_date ?? best.first_air_date);
-      const details = await fetchTmdbDetails(best.media_type, best.id, token);
+      const details = await fetchTmdbDetails(best.media_type, best.id);
       const genresFromSearch = (best.genre_ids ?? []).map((id) => genreLookup.get(id)).filter((name): name is string => Boolean(name));
       const genres = details?.genres?.length ? details.genres : genresFromSearch;
       const cast = details?.cast?.length ? details.cast : undefined;
@@ -121,14 +116,12 @@ interface TmdbDetailSummary {
 
 async function fetchTmdbDetails(
   mediaType: "movie" | "tv" | "person" | undefined,
-  id: number,
-  token: string
+  id: number
 ): Promise<TmdbDetailSummary | null> {
   if (mediaType !== "movie" && mediaType !== "tv") return null;
 
   const response = await fetch(`${API_BASE}/${mediaType}/${id}?append_to_response=credits`, {
     headers: {
-      Authorization: `Bearer ${token}`,
       accept: "application/json"
     }
   });
@@ -157,16 +150,16 @@ async function fetchTmdbDetails(
   };
 }
 
-async function getGenreLookup(token: string): Promise<Map<number, string>> {
+async function getGenreLookup(): Promise<Map<number, string>> {
   if (genreLookupPromise) return genreLookupPromise;
 
   genreLookupPromise = (async () => {
     const [movieRes, tvRes] = await Promise.all([
       fetch(`${API_BASE}/genre/movie/list`, {
-        headers: { Authorization: `Bearer ${token}`, accept: "application/json" }
+        headers: { accept: "application/json" }
       }),
       fetch(`${API_BASE}/genre/tv/list`, {
-        headers: { Authorization: `Bearer ${token}`, accept: "application/json" }
+        headers: { accept: "application/json" }
       })
     ]);
 

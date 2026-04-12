@@ -1,4 +1,7 @@
 import type { OnboardingAnswers, TasteProfile, Title } from "../types";
+import { loadBackendConfig } from "./backendConfig";
+
+const OPENAI_COMPLETIONS_URL = "/api/openai/chat/completions";
 
 export interface AiRerankRequest {
   answers: OnboardingAnswers;
@@ -19,11 +22,11 @@ export interface AiSuggestedTitle {
 }
 
 export async function rerankCandidatesWithAi(req: AiRerankRequest): Promise<Title[]> {
-  const config = getAiConfig();
+  const config = await getAiRuntime();
   if (!config) return req.candidates;
 
   for (const model of config.models) {
-    const orderedIds = await tryRerankWithModel({ ...req, apiKey: config.apiKey, baseUrl: config.baseUrl, model });
+    const orderedIds = await tryRerankWithModel({ ...req, model });
     if (orderedIds.length > 0) {
       return mapIdsToCandidates(orderedIds, req.candidates);
     }
@@ -33,11 +36,11 @@ export async function rerankCandidatesWithAi(req: AiRerankRequest): Promise<Titl
 }
 
 export async function generateSuggestionsWithAi(req: AiGenerateRequest): Promise<AiSuggestedTitle[]> {
-  const config = getAiConfig();
+  const config = await getAiRuntime();
   if (!config) return [];
 
   for (const model of config.models) {
-    const suggestions = await tryGenerateWithModel({ ...req, apiKey: config.apiKey, baseUrl: config.baseUrl, model });
+    const suggestions = await tryGenerateWithModel({ ...req, model });
     if (suggestions.length >= req.count) return suggestions.slice(0, req.count);
     if (suggestions.length > 0) return suggestions;
   }
@@ -46,14 +49,10 @@ export async function generateSuggestionsWithAi(req: AiGenerateRequest): Promise
 }
 
 interface ModelAttempt extends AiRerankRequest {
-  apiKey: string;
-  baseUrl: string;
   model: string;
 }
 
 interface GenerateModelAttempt extends AiGenerateRequest {
-  apiKey: string;
-  baseUrl: string;
   model: string;
 }
 
@@ -61,10 +60,9 @@ async function tryRerankWithModel(input: ModelAttempt): Promise<string[]> {
   const prompt = buildRerankPrompt(input);
 
   try {
-    const response = await fetch(`${input.baseUrl}/chat/completions`, {
+    const response = await fetch(OPENAI_COMPLETIONS_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${input.apiKey}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -104,10 +102,9 @@ async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSugg
   const prompt = buildGeneratePrompt(input);
 
   try {
-    const response = await fetch(`${input.baseUrl}/chat/completions`, {
+    const response = await fetch(OPENAI_COMPLETIONS_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${input.apiKey}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -243,20 +240,12 @@ function mapIdsToCandidates(orderedIds: string[], candidates: Title[]): Title[] 
   return finalIds.map((id) => map.get(id)).filter((title): title is Title => Boolean(title));
 }
 
-interface AiConfig {
-  apiKey: string;
-  baseUrl: string;
+interface AiRuntime {
   models: string[];
 }
 
-function getAiConfig(): AiConfig | null {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
-  const baseUrl = (import.meta.env.VITE_OPENAI_BASE_URL as string | undefined) ?? "https://api.openai.com/v1";
-  const rawModels = (import.meta.env.VITE_AI_MODELS as string | undefined) ?? "gpt-4.1-mini";
-  const models = rawModels
-    .split(",")
-    .map((model) => model.trim())
-    .filter(Boolean);
-  if (!apiKey || models.length === 0) return null;
-  return { apiKey, baseUrl, models };
+async function getAiRuntime(): Promise<AiRuntime | null> {
+  const backend = await loadBackendConfig();
+  if (!backend.ai || backend.openaiModels.length === 0) return null;
+  return { models: backend.openaiModels };
 }

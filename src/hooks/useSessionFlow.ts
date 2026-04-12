@@ -3,6 +3,7 @@ import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultPro
 import { rankTitles } from "../engine/scoring";
 import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "../services/ai";
 import { saveLastAnswers } from "../services/storage";
+import { loadBackendConfig } from "../services/backendConfig";
 import { enrichTitlesWithTmdb } from "../services/tmdb";
 import { buildDeck, createSession } from "../state/machine";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
@@ -42,8 +43,7 @@ export function useSessionFlow(params: {
     saveLastAnswers({ ...session.answers, quickModeId: undefined });
 
     try {
-      const aiEnabled = Boolean(import.meta.env.VITE_OPENAI_API_KEY);
-      const tmdbEnabled = Boolean(import.meta.env.VITE_TMDB_READ_ACCESS_TOKEN);
+      const { ai: aiEnabled, tmdb: tmdbEnabled } = await loadBackendConfig();
       let deckTitles: Title[] = [];
 
       if (aiEnabled) {
