@@ -1,3 +1,4 @@
+import { normalizeMoodList } from "../config/options";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title, TitleType } from "../types";
 
 export function deriveSmartDefaultsFromProfile(profile: TasteProfile): Partial<OnboardingAnswers> {
@@ -22,6 +23,12 @@ export function deriveSmartDefaultsFromProfile(profile: TasteProfile): Partial<O
       ? "movie"
       : "series";
   if (topType) defaults.preferredType = topType;
+
+  const topMood = topAffinityKey(profile.moodAffinity, 0.45);
+  if (topMood) {
+    const moods = normalizeMoodList([topMood]);
+    if (moods.length) defaults.moods = moods;
+  }
 
   return defaults;
 }

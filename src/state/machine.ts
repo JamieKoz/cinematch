@@ -1,3 +1,4 @@
+import { normalizeMoodList } from "../config/options";
 import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { rankTitles } from "../engine/scoring";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
@@ -35,7 +36,7 @@ export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): Onb
 
   return {
     quickModeId: seed.quickModeId,
-    moods: normalizeStringArray(seed.moods ?? legacySeed.mood),
+    moods: normalizeMoodList(normalizeStringArray(seed.moods ?? legacySeed.mood)),
     preferredType: seed.preferredType ?? "either",
     runtime: seed.runtime ?? "any",
     languages: normalizeLanguages(seed.languages ?? legacySeed.language),

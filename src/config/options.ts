@@ -1,6 +1,30 @@
 import type { OnboardingAnswers } from "../types";
 
-export const MOOD_OPTIONS = ["Light", "Intense", "Emotional", "Mind-bending"];
+/** Canonical mood tokens (match `Title.moods` / scoring); `label` is UI-only. */
+export const MOOD_CHIPS: { value: string; label: string }[] = [
+  { value: "light", label: "Light" },
+  { value: "intense", label: "Intense" },
+  { value: "emotional", label: "Emotional" },
+  { value: "mind-bending", label: "Mind-bending" }
+];
+
+export function normalizeMoodList(raw?: string[] | string): string[] {
+  const arr = !raw ? [] : Array.isArray(raw) ? raw : [raw];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of arr) {
+    const t = item.trim().toLowerCase();
+    if (!t) continue;
+    const chip = MOOD_CHIPS.find(
+      (m) => m.value === t || m.value === t.replace(/\s+/g, "-") || m.label.toLowerCase() === t
+    );
+    if (chip && !seen.has(chip.value)) {
+      seen.add(chip.value);
+      out.push(chip.value);
+    }
+  }
+  return out;
+}
 export const PROVIDER_OPTIONS = ["Netflix", "Prime", "Hulu", "HBO Max", "Apple", "Disney"];
 export const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
 export const EXCLUSION_OPTIONS = ["Horror", "Crime", "Romance", "Drama", "Action", "Thriller", "Comedy"];
@@ -39,6 +63,6 @@ export const QUICK_PRESETS: QuickPreset[] = [
     id: "binge-mode",
     label: "Binge mode",
     description: "Series-first setup for longer sessions.",
-    values: { preferredType: "series", runtime: "any" }
+    values: { preferredType: "series", runtime: "any", moods: ["emotional", "intense"] }
   }
 ];

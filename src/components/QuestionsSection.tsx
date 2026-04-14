@@ -4,7 +4,7 @@ import {
   EXCLUSION_OPTIONS,
   FAMILIARITY_OPTIONS,
   LANGUAGE_OPTIONS,
-  MOOD_OPTIONS,
+  MOOD_CHIPS,
   PROVIDER_OPTIONS,
   QUICK_PRESETS,
   RELEASE_WINDOW_OPTIONS,
@@ -107,17 +107,17 @@ export function QuestionsSection(props: {
             <div className="mt-4 grid gap-2 onboarding-reveal onboarding-reveal-d1">
               <label className="text-sm text-zinc-200">Mood</label>
               <div className="flex flex-wrap gap-2">
-                {MOOD_OPTIONS.map((mood) => (
+                {MOOD_CHIPS.map((mood) => (
                   <button
-                    key={mood}
+                    key={mood.value}
                     className={
-                      answers.moods?.includes(mood)
+                      answers.moods?.includes(mood.value)
                         ? "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40"
                         : "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70"
                     }
-                    onClick={() => onToggleMood(mood)}
+                    onClick={() => onToggleMood(mood.value)}
                   >
-                    {mood}
+                    {mood.label}
                   </button>
                 ))}
               </div>
