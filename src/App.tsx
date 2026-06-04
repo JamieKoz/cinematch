@@ -12,6 +12,7 @@ import { useQuickSetup } from "./hooks/useQuickSetup";
 import { useShareCurrentTitle } from "./hooks/useShareCurrentTitle";
 import { useSessionFlow } from "./hooks/useSessionFlow";
 import { useSwipeGesture } from "./hooks/useSwipeGesture";
+import { openWatchUrl } from "./services/affiliate";
 import { loadBackendConfig } from "./services/backendConfig";
 import { loadLastAnswers, loadProfile, resetPersonalization, saveProfile } from "./services/storage";
 import { createInitialAnswers, createSession, nextPair } from "./state/machine";
@@ -153,8 +154,7 @@ export function App() {
   function handleWatchNow() {
     finalizeDecision();
     if (!winner || typeof window === "undefined") return;
-    const query = encodeURIComponent(`${winner.name} ${winner.releaseYear}`);
-    window.open(`https://www.justwatch.com/us/search?q=${query}`, "_blank", "noopener,noreferrer");
+    openWatchUrl(winner);
   }
 
   return (
