@@ -34,7 +34,7 @@ export function AppHeader({ onClearCache }: { onClearCache: () => void }) {
         </details>
       </div>
       <div>
-        <p className="text-sm text-zinc-300 md:text-base">Find the match for your next film.</p>
+        <p className="text-sm text-zinc-300 md:text-base">Find the match for your next watch.</p>
       </div>
     </header>
   );
