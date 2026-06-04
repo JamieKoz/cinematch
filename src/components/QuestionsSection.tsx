@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { DeckBuildingOverlay } from "./DeckBuildingOverlay";
+import { AvoidTonightPicker } from "./AvoidTonightPicker";
+import { DiscoveryAudiencePicker, DiscoveryPopularityPicker } from "./DiscoveryStylePicker";
 import { LanguageMultiSelect } from "./LanguageMultiSelect";
 import { ReleaseTimeline } from "./ReleaseTimeline";
 import {
-  EXCLUSION_OPTIONS,
-  FAMILIARITY_OPTIONS,
   MOOD_CHIPS,
   PROVIDER_OPTIONS,
   RUNTIME_OPTIONS,
@@ -20,6 +20,7 @@ type OnboardingStep =
   | "release"
   | "language"
   | "discovery"
+  | "audience"
   | "provider"
   | "avoid"
   | "keywords";
@@ -34,6 +35,7 @@ const STEP_ORDER: OnboardingStep[] = [
   "release",
   "language",
   "discovery",
+  "audience",
   "provider",
   "avoid",
   "keywords"
@@ -137,35 +139,6 @@ function NavButton({
   );
 }
 
-function OptionChip({
-  selected,
-  onClick,
-  children,
-  tone = "violet"
-}: {
-  selected: boolean;
-  onClick: () => void;
-  children: ReactNode;
-  tone?: "violet" | "rose";
-}) {
-  const selectedClass =
-    tone === "rose"
-      ? "rounded-full border border-rose-300/70 bg-rose-500/25 px-3 py-1.5 text-sm transition hover:bg-rose-500/35"
-      : "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40";
-  const defaultClass =
-    "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-violet-300/55 hover:bg-violet-500/15";
-
-  return (
-    <button type="button" className={selected ? selectedClass : defaultClass} onClick={onClick}>
-      {children}
-    </button>
-  );
-}
-
-function ChipGroup({ children }: { children: ReactNode }) {
-  return <div className="mx-auto flex max-w-2xl flex-wrap justify-center gap-2">{children}</div>;
-}
-
 export function QuestionsSection(props: {
   answers: OnboardingAnswers;
   isBuildingDeck: boolean;
@@ -178,7 +151,6 @@ export function QuestionsSection(props: {
   onToggleProvider: (provider: string) => void;
   onToggleExclusion: (exclusion: string) => void;
   onToggleMood: (mood: string) => void;
-  onToggleFamiliarity: (familiarity: "any" | "popular" | "hidden-gems" | "for-kids") => void;
   onClearCache: () => void;
   onStart: () => void;
 }) {
@@ -194,7 +166,6 @@ export function QuestionsSection(props: {
     onToggleProvider,
     onToggleExclusion,
     onToggleMood,
-    onToggleFamiliarity,
     onClearCache,
     onStart
   } = props;
@@ -383,24 +354,32 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "discovery" ? (
-            <StepFrame step="discovery" direction={direction} title="Discovery style" subtitle="How well-known should picks be?" footer={stepNav}>
-              <ChipGroup>
-                {FAMILIARITY_OPTIONS.map((familiarity) => {
-                  const selected =
-                    familiarity === "any" ? !answers.familiarities?.length : answers.familiarities?.includes(familiarity);
-                  return (
-                    <OptionChip key={familiarity} selected={Boolean(selected)} onClick={() => onToggleFamiliarity(familiarity)}>
-                      {familiarity === "any"
-                        ? "Any"
-                        : familiarity === "popular"
-                          ? "Popular picks"
-                          : familiarity === "hidden-gems"
-                            ? "Hidden gems"
-                            : "For kids"}
-                    </OptionChip>
-                  );
-                })}
-              </ChipGroup>
+            <StepFrame
+              step="discovery"
+              direction={direction}
+              title="Discovery style"
+              subtitle="Pick any that apply — or leave on Surprise me for a balanced mix."
+              footer={stepNav}
+            >
+              <DiscoveryPopularityPicker
+                familiarities={answers.familiarities}
+                onChange={(familiarities) => onUpdateAnswers({ familiarities })}
+              />
+            </StepFrame>
+          ) : null}
+
+          {step === "audience" ? (
+            <StepFrame
+              step="audience"
+              direction={direction}
+              title="Who's watching?"
+              subtitle="Set the tone for who you're choosing for tonight."
+              footer={stepNav}
+            >
+              <DiscoveryAudiencePicker
+                familiarities={answers.familiarities}
+                onChange={(familiarities) => onUpdateAnswers({ familiarities })}
+              />
             </StepFrame>
           ) : null}
 
@@ -444,19 +423,17 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "avoid" ? (
-            <StepFrame step="avoid" direction={direction} title="Avoid tonight" subtitle="Genres to skip this session." footer={stepNav}>
-              <ChipGroup>
-                {EXCLUSION_OPTIONS.map((exclusion) => (
-                  <OptionChip
-                    key={exclusion}
-                    selected={Boolean(answers.hardExclusions?.includes(exclusion))}
-                    onClick={() => onToggleExclusion(exclusion)}
-                    tone="rose"
-                  >
-                    {exclusion}
-                  </OptionChip>
-                ))}
-              </ChipGroup>
+            <StepFrame
+              step="avoid"
+              direction={direction}
+              title="Avoid tonight"
+              subtitle="Tap genres you don't want in the deck tonight."
+              footer={stepNav}
+            >
+              <AvoidTonightPicker
+                selected={answers.hardExclusions ?? []}
+                onToggle={onToggleExclusion}
+              />
             </StepFrame>
           ) : null}
 
@@ -475,7 +452,7 @@ export function QuestionsSection(props: {
                       handleStart();
                     }
                   }}
-                  placeholder="animation, black and white, slasher"
+                  placeholder="Black and white, Slasher, Feel-good"
                 />
               </div>
             </StepFrame>

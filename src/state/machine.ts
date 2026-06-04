@@ -1,4 +1,9 @@
-import { normalizeLanguageCodes, normalizeMoodList, normalizeProviderList } from "../config/options";
+import {
+  normalizeFamiliarityList,
+  normalizeLanguageCodes,
+  normalizeMoodList,
+  normalizeProviderList
+} from "../config/options";
 import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { rankTitles } from "../engine/scoring";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
@@ -44,7 +49,9 @@ export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): Onb
     ),
     releaseWindow: seed.releaseWindow ?? "any",
     customYearRange: seed.customYearRange ?? null,
-    familiarities: normalizeFamiliarities(seed.familiarities ?? legacySeed.familiarity),
+    familiarities: normalizeFamiliarityList(
+      normalizeStringArray(seed.familiarities ?? legacySeed.familiarity)
+    ),
     providers: normalizeProviderList(seed.providers),
     hardExclusions: seed.hardExclusions ?? [],
     keywords: normalizeStringArray(seed.keywords),
@@ -101,15 +108,5 @@ function normalizeStringArray(value: string[] | string | undefined): string[] {
         .filter(Boolean)
     )
   );
-}
-
-function normalizeFamiliarities(
-  value: Array<"popular" | "hidden-gems" | "for-kids"> | "any" | "popular" | "hidden-gems" | "for-kids" | undefined
-): Array<"popular" | "hidden-gems" | "for-kids"> {
-  const normalized = normalizeStringArray(value).filter(
-    (item): item is "popular" | "hidden-gems" | "for-kids" =>
-      item === "popular" || item === "hidden-gems" || item === "for-kids"
-  );
-  return normalized;
 }
 

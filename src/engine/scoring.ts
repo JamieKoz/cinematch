@@ -97,20 +97,28 @@ export function scoreCandidate({ title, answers, profile }: ScoreInput): number 
   score += title.popularity * 0.8;
   score += normalizeRecency(title.releaseYear) * 0.4;
 
-  const wantsPopular = answers.familiarities?.includes("popular");
-  const wantsHiddenGems = answers.familiarities?.includes("hidden-gems");
-  if (wantsPopular && !wantsHiddenGems) {
-    score += title.popularity * 1.1;
-  } else if (wantsHiddenGems && !wantsPopular) {
-    score += (1 - title.popularity) * 1.1;
+  if (answers.familiarities?.includes("popular")) {
+    score += title.popularity * 0.9;
+  }
+  if (answers.familiarities?.includes("hidden-gems")) {
+    score += (1 - title.popularity) * 0.9;
   }
 
+  if (answers.familiarities?.includes("acclaimed")) {
+    score += (title.rating ?? 0.55) * 1.4;
+  }
+
+  const friendlyMatches = title.genres.filter((genre) => KIDS_FRIENDLY_GENRES.has(genre)).length;
+  const unfriendlyMatches = title.genres.filter((genre) => KIDS_UNFRIENDLY_GENRES.has(genre)).length;
+
   if (answers.familiarities?.includes("for-kids")) {
-    // Bias toward gentler genres and away from more mature/crime-heavy picks.
-    const friendlyMatches = title.genres.filter((genre) => KIDS_FRIENDLY_GENRES.has(genre)).length;
-    const unfriendlyMatches = title.genres.filter((genre) => KIDS_UNFRIENDLY_GENRES.has(genre)).length;
     score += friendlyMatches * 1.4;
     score -= unfriendlyMatches * 1.8;
+  }
+
+  if (answers.familiarities?.includes("adults-only")) {
+    score -= friendlyMatches * 1.3;
+    score += unfriendlyMatches * 0.4;
   }
 
   return score;

@@ -61,19 +61,6 @@ export function useQuickSetup(params: {
     });
   }
 
-  function toggleFamiliarity(familiarity: "any" | "popular" | "hidden-gems" | "for-kids") {
-    if (familiarity === "any") {
-      updateAnswers({ familiarities: [] });
-      return;
-    }
-    const selected = answers.familiarities?.includes(familiarity);
-    updateAnswers({
-      familiarities: selected
-        ? answers.familiarities?.filter((value) => value !== familiarity)
-        : [...(answers.familiarities ?? []), familiarity]
-    });
-  }
-
   function toggleCustomYearRange() {
     if (answers.customYearRange) {
       updateAnswers({ customYearRange: null });
@@ -100,7 +87,6 @@ export function useQuickSetup(params: {
     toggleProvider,
     toggleExclusion,
     toggleMood,
-    toggleFamiliarity,
     toggleCustomYearRange,
     updateCustomYearRange
   };

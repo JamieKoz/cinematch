@@ -271,6 +271,46 @@ body {
   box-shadow: 0 12px 36px rgba(91, 33, 182, 0.28);
 }
 
+.onboarding-choice-card--exclusion {
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.onboarding-choice-card--exclusion:hover:not(.onboarding-choice-card--exclusion-selected) {
+  border-color: rgba(251, 113, 133, 0.5);
+  background: linear-gradient(145deg, rgba(190, 24, 93, 0.18), rgba(24, 24, 27, 0.92));
+  box-shadow: 0 8px 24px rgba(190, 24, 93, 0.14);
+}
+
+.onboarding-choice-card--exclusion-selected {
+  border-color: rgba(251, 113, 133, 0.75);
+  background: linear-gradient(145deg, rgba(190, 24, 93, 0.38), rgba(24, 24, 27, 0.88));
+  box-shadow: 0 12px 36px rgba(190, 24, 93, 0.24);
+}
+
+.avoid-tonight__grid {
+  display: grid;
+  width: 100%;
+  max-width: 36rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .avoid-tonight__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .avoid-tonight__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .onboarding-choice-card--tall {
   min-height: 10.5rem;
   align-items: center;
@@ -364,8 +404,7 @@ body {
 }
 
 .release-timeline__any {
-  display: block;
-  width: 100%;
+  width: 30%;
   margin-bottom: 1.25rem;
   border-radius: 9999px;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -701,6 +740,32 @@ body {
   flex-shrink: 0;
 }
 
+.discovery-style__grid {
+  display: grid;
+  width: 100%;
+  max-width: 40rem;
+  gap: 0.75rem;
+  margin: 0 auto;
+}
+
+.discovery-style__grid--popularity {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.discovery-style__grid--audience {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 639px) {
+  .discovery-style__grid--audience {
+    grid-template-columns: 1fr;
+  }
+
+  .discovery-style__grid--popularity .onboarding-choice-card {
+    min-height: 7.5rem;
+  }
+}
+
 .onboarding-reveal {
   animation: onboarding-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -850,6 +915,10 @@ body {
   }
 
   .onboarding-choice-card:hover:not(.onboarding-choice-card--selected) {
+    transform: none;
+  }
+
+  .onboarding-choice-card--exclusion:hover:not(.onboarding-choice-card--exclusion-selected) {
     transform: none;
   }
 

@@ -13,7 +13,7 @@ export function ResultSection({
   onPickAnother: () => void;
 }) {
   return (
-    <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
+    <section className="rounded-3xl border border-white/20  p-5 shadow-2xl backdrop-blur-lg">
       <TitleCard title={winner} />
       {backup ? <p className="mt-2 text-sm text-zinc-300">Backup option: {backup.name}</p> : null}
       <div className="mt-4 flex gap-3">

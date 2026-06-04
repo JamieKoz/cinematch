@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeLanguageCodes, normalizeMoodList } from "./options";
+import { normalizeFamiliarityList, normalizeLanguageCodes, normalizeMoodList } from "./options";
 
 describe("normalizeMoodList", () => {
   it("maps preset-style lowercase tokens", () => {
@@ -26,5 +26,15 @@ describe("normalizeLanguageCodes", () => {
 
   it("keeps valid multiselect codes", () => {
     expect(normalizeLanguageCodes(["en", "fr", "ja"])).toEqual(["en", "fr", "ja"]);
+  });
+});
+
+describe("normalizeFamiliarityList", () => {
+  it("drops legacy any token", () => {
+    expect(normalizeFamiliarityList(["any", "popular"])).toEqual(["popular"]);
+  });
+
+  it("keeps audience and popularity tokens together", () => {
+    expect(normalizeFamiliarityList(["hidden-gems", "adults-only"])).toEqual(["hidden-gems", "adults-only"]);
   });
 });

@@ -193,7 +193,7 @@ export function normalizeLanguageCodes(raw?: string[]): string[] {
   }
   return out.length ? out : [...DEFAULT_LANGUAGES];
 }
-export const EXCLUSION_OPTIONS = ["Horror", "Crime", "Romance", "Drama", "Action", "Thriller", "Comedy"];
+export const EXCLUSION_OPTIONS = ["Horror", "Crime", "Romance", "Drama", "Action", "Thriller", "Comedy", "Animation"];
 export const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;
 
 /** Chronological order (oldest → newest) for the release step timeline. */
@@ -202,12 +202,77 @@ export const RELEASE_TIMELINE_SEGMENTS: {
   label: string;
   hint: string;
 }[] = [
-  { value: "pre-2000", label: "Pre-2000", hint: "1999 & earlier" },
-  { value: "2000s", label: "2000s", hint: "2000–09" },
-  { value: "2010s", label: "2010s", hint: "2010–19" },
-  { value: "2020s", label: "2020+", hint: "2020–now" }
-];
-export const FAMILIARITY_OPTIONS = ["any", "popular", "hidden-gems", "for-kids"] as const;
+    { value: "pre-2000", label: "Pre-2000", hint: "1999 & earlier" },
+    { value: "2000s", label: "2000s", hint: "2000–09" },
+    { value: "2010s", label: "2010s", hint: "2010–19" },
+    { value: "2020s", label: "2020+", hint: "2020–now" }
+  ];
+export const FAMILIARITY_TOKENS = ["popular", "hidden-gems", "for-kids", "adults-only", "acclaimed"] as const;
+export type FamiliarityToken = (typeof FAMILIARITY_TOKENS)[number];
+
+export type DiscoveryPopularity = "balanced" | "popular" | "hidden-gems" | "acclaimed";
+export type DiscoveryAudience = "general" | "adults-only" | "for-kids";
+
+export const DISCOVERY_POPULARITY_OPTIONS: {
+  id: DiscoveryPopularity;
+  label: string;
+  description: string;
+}[] = [
+    { id: "balanced", label: "Surprise me", description: "A balanced mix — no strong skew either way" },
+    { id: "popular", label: "Crowd favourites", description: "Well-known picks people are talking about" },
+    { id: "hidden-gems", label: "Hidden gems", description: "Lesser-known titles worth discovering" },
+    { id: "acclaimed", label: "Highly rated", description: "Favour stronger reviews and buzz" }
+  ];
+
+export const DISCOVERY_AUDIENCE_OPTIONS: {
+  id: DiscoveryAudience;
+  label: string;
+  description: string;
+}[] = [
+    { id: "general", label: "General", description: "Default — not skewed toward family or kids" },
+    { id: "adults-only", label: "Adults only", description: "Steer away from family and kids-style picks" },
+    { id: "for-kids", label: "Family night", description: "Gentler, kid-friendly choices" }
+  ];
+
+const POPULARITY_FAMILIARITY_TOKENS = new Set<FamiliarityToken>(["popular", "hidden-gems", "acclaimed"]);
+
+export function getPopularityTokens(familiarities?: string[]): FamiliarityToken[] {
+  return (familiarities ?? []).filter((token): token is FamiliarityToken =>
+    POPULARITY_FAMILIARITY_TOKENS.has(token as FamiliarityToken)
+  );
+}
+
+export function getDiscoveryAudience(familiarities?: string[]): DiscoveryAudience {
+  if (familiarities?.includes("for-kids")) return "for-kids";
+  if (familiarities?.includes("adults-only")) return "adults-only";
+  return "general";
+}
+
+export function buildDiscoveryFamiliarities(
+  popularityTokens: FamiliarityToken[],
+  audience: DiscoveryAudience
+): FamiliarityToken[] {
+  const out: FamiliarityToken[] = [];
+  for (const token of popularityTokens) {
+    if (POPULARITY_FAMILIARITY_TOKENS.has(token)) out.push(token);
+  }
+  if (audience === "for-kids") out.push("for-kids");
+  if (audience === "adults-only") out.push("adults-only");
+  return out;
+}
+
+export function normalizeFamiliarityList(raw?: string[]): FamiliarityToken[] {
+  const seen = new Set<FamiliarityToken>();
+  const out: FamiliarityToken[] = [];
+  for (const item of raw ?? []) {
+    const token = item.trim().toLowerCase();
+    if (token === "any" || !token) continue;
+    if (!FAMILIARITY_TOKENS.includes(token as FamiliarityToken) || seen.has(token as FamiliarityToken)) continue;
+    seen.add(token as FamiliarityToken);
+    out.push(token as FamiliarityToken);
+  }
+  return out;
+}
 export const YEAR_MIN = 1900;
 export const YEAR_MAX = new Date().getFullYear();
 

@@ -51,7 +51,6 @@ export function App() {
     toggleProvider,
     toggleExclusion,
     toggleMood,
-    toggleFamiliarity,
     toggleCustomYearRange,
     updateCustomYearRange
   } = useQuickSetup({
@@ -174,7 +173,6 @@ export function App() {
             onToggleProvider={toggleProvider}
             onToggleExclusion={toggleExclusion}
             onToggleMood={toggleMood}
-            onToggleFamiliarity={toggleFamiliarity}
             onClearCache={handleResetPersonalization}
             onStart={startSwipeRound}
           />

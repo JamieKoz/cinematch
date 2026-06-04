@@ -17,7 +17,7 @@ export function ShowdownSection({
   onShowMoreRight: () => void;
 }) {
   return (
-    <section className="rounded-3xl border border-white/20 bg-zinc-900/55 p-5 shadow-2xl backdrop-blur-xl">
+    <section className="rounded-3xl border border-white/20 p-5 shadow-2xl backdrop-blur-lg">
       <h2 className="text-xl font-semibold">Final showdown</h2>
       <p className="mt-2 text-sm text-zinc-300">Pick one. Use “Show more” for description and full details.</p>
       <div className="mt-4 grid grid-cols-2 gap-3">
