@@ -1,7 +1,6 @@
-const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const TURNSTILE_WAIT_MS = 15_000;
 
 type TurnstileApi = {
-  ready: (cb: () => void) => void;
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
   execute: (widgetId: string, options?: Record<string, unknown>) => void;
   reset: (widgetId: string) => void;
@@ -13,34 +12,41 @@ declare global {
   }
 }
 
-let scriptPromise: Promise<void> | null = null;
 let widgetId: string | null = null;
 let container: HTMLDivElement | null = null;
 let configuredSiteKey: string | null = null;
+let apiReadyPromise: Promise<TurnstileApi> | null = null;
 
-function loadTurnstileScript(): Promise<void> {
-  if (typeof window === "undefined") return Promise.reject(new Error("Turnstile requires a browser"));
-  if (window.turnstile) return Promise.resolve();
-  if (scriptPromise) return scriptPromise;
+function waitForTurnstileApi(): Promise<TurnstileApi> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Turnstile requires a browser"));
+  }
 
-  scriptPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src^="https://challenges.cloudflare.com/turnstile"]`);
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Turnstile script failed")), { once: true });
-      return;
-    }
+  const existing = window.turnstile;
+  if (existing?.render) return Promise.resolve(existing);
 
-    const script = document.createElement("script");
-    script.src = SCRIPT_URL;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Turnstile script failed"));
-    document.head.appendChild(script);
+  if (apiReadyPromise) return apiReadyPromise;
+
+  apiReadyPromise = new Promise((resolve, reject) => {
+    const started = Date.now();
+
+    const tick = () => {
+      const api = window.turnstile;
+      if (api?.render) {
+        resolve(api);
+        return;
+      }
+      if (Date.now() - started >= TURNSTILE_WAIT_MS) {
+        reject(new Error("Turnstile API unavailable"));
+        return;
+      }
+      window.setTimeout(tick, 50);
+    };
+
+    tick();
   });
 
-  return scriptPromise;
+  return apiReadyPromise;
 }
 
 function ensureContainer(): HTMLDivElement {
@@ -62,6 +68,9 @@ export function configureTurnstile(siteKey: string | null | undefined): void {
   if (configuredSiteKey === key) return;
   configuredSiteKey = key;
   widgetId = null;
+  void waitForTurnstileApi().catch(() => {
+    /* preload; failures surface on getTurnstileToken */
+  });
 }
 
 export function isTurnstileConfigured(): boolean {
@@ -72,34 +81,22 @@ async function ensureWidget(): Promise<string> {
   const siteKey = configuredSiteKey;
   if (!siteKey) throw new Error("Turnstile is not configured");
 
-  await loadTurnstileScript();
-  const api = window.turnstile;
-  if (!api) throw new Error("Turnstile API unavailable");
-
+  const api = await waitForTurnstileApi();
   if (widgetId) return widgetId;
 
-  return new Promise((resolve, reject) => {
-    api.ready(() => {
-      try {
-        const id = api.render(ensureContainer(), {
-          sitekey: siteKey,
-          size: "invisible",
-          execution: "execute",
-          appearance: "interaction-only"
-        });
-        widgetId = id;
-        resolve(id);
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
+  const id = api.render(ensureContainer(), {
+    sitekey: siteKey,
+    size: "invisible",
+    execution: "execute",
+    appearance: "interaction-only"
   });
+  widgetId = id;
+  return id;
 }
 
 export async function getTurnstileToken(): Promise<string> {
   const id = await ensureWidget();
-  const api = window.turnstile;
-  if (!api) throw new Error("Turnstile API unavailable");
+  const api = await waitForTurnstileApi();
 
   return new Promise((resolve, reject) => {
     api.execute(id, {
