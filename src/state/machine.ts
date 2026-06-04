@@ -1,4 +1,4 @@
-import { normalizeMoodList, normalizeProviderList } from "../config/options";
+import { normalizeLanguageCodes, normalizeMoodList, normalizeProviderList } from "../config/options";
 import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { rankTitles } from "../engine/scoring";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
@@ -39,7 +39,9 @@ export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): Onb
     moods: normalizeMoodList(normalizeStringArray(seed.moods ?? legacySeed.mood)),
     preferredType: seed.preferredType ?? "either",
     runtime: seed.runtime ?? "any",
-    languages: normalizeLanguages(seed.languages ?? legacySeed.language),
+    languages: normalizeLanguageCodes(
+      normalizeStringArray(seed.languages ?? legacySeed.language)
+    ),
     releaseWindow: seed.releaseWindow ?? "any",
     customYearRange: seed.customYearRange ?? null,
     familiarities: normalizeFamiliarities(seed.familiarities ?? legacySeed.familiarity),
@@ -111,6 +113,3 @@ function normalizeFamiliarities(
   return normalized;
 }
 
-function normalizeLanguages(value: string[] | string | undefined): string[] {
-  return normalizeStringArray(value).filter((language) => language !== "any");
-}

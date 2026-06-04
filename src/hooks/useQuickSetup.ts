@@ -31,6 +31,7 @@ export function useQuickSetup(params: {
     updateAnswers({
       ...smartDefaults,
       moods: [],
+      languages: ["en"],
       quickModeId: undefined
     });
   }
@@ -57,19 +58,6 @@ export function useQuickSetup(params: {
     const selected = answers.moods?.includes(mood);
     updateAnswers({
       moods: selected ? answers.moods?.filter((value) => value !== mood) : [...(answers.moods ?? []), mood]
-    });
-  }
-
-  function toggleLanguage(language: string) {
-    if (language === "any") {
-      updateAnswers({ languages: [] });
-      return;
-    }
-    const selected = answers.languages?.includes(language);
-    updateAnswers({
-      languages: selected
-        ? answers.languages?.filter((value) => value !== language)
-        : [...(answers.languages ?? []), language]
     });
   }
 
@@ -112,7 +100,6 @@ export function useQuickSetup(params: {
     toggleProvider,
     toggleExclusion,
     toggleMood,
-    toggleLanguage,
     toggleFamiliarity,
     toggleCustomYearRange,
     updateCustomYearRange

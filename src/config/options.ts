@@ -87,7 +87,112 @@ export function normalizeProviderList(raw?: string[]): string[] {
   }
   return out;
 }
-export const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
+export type LanguageOption = {
+  code: string;
+  label: string;
+  flag?: string;
+};
+
+export const DEFAULT_LANGUAGES = ["en"] as const;
+
+const LANGUAGE_OPTIONS_REST: LanguageOption[] = [
+  { code: "af", label: "Afrikaans", flag: "🇿🇦" },
+  { code: "sq", label: "Albanian", flag: "🇦🇱" },
+  { code: "am", label: "Amharic", flag: "🇪🇹" },
+  { code: "ar", label: "Arabic", flag: "🇸🇦" },
+  { code: "hy", label: "Armenian", flag: "🇦🇲" },
+  { code: "az", label: "Azerbaijani", flag: "🇦🇿" },
+  { code: "eu", label: "Basque", flag: "🇪🇸" },
+  { code: "bn", label: "Bengali", flag: "🇧🇩" },
+  { code: "bg", label: "Bulgarian", flag: "🇧🇬" },
+  { code: "my", label: "Burmese", flag: "🇲🇲" },
+  { code: "ca", label: "Catalan", flag: "🇪🇸" },
+  { code: "zh", label: "Chinese", flag: "🇨🇳" },
+  { code: "hr", label: "Croatian", flag: "🇭🇷" },
+  { code: "cs", label: "Czech", flag: "🇨🇿" },
+  { code: "da", label: "Danish", flag: "🇩🇰" },
+  { code: "nl", label: "Dutch", flag: "🇳🇱" },
+  { code: "et", label: "Estonian", flag: "🇪🇪" },
+  { code: "fi", label: "Finnish", flag: "🇫🇮" },
+  { code: "fil", label: "Filipino", flag: "🇵🇭" },
+  { code: "fr", label: "French", flag: "🇫🇷" },
+  { code: "gl", label: "Galician", flag: "🇪🇸" },
+  { code: "ka", label: "Georgian", flag: "🇬🇪" },
+  { code: "de", label: "German", flag: "🇩🇪" },
+  { code: "el", label: "Greek", flag: "🇬🇷" },
+  { code: "gu", label: "Gujarati", flag: "🇮🇳" },
+  { code: "he", label: "Hebrew", flag: "🇮🇱" },
+  { code: "hi", label: "Hindi", flag: "🇮🇳" },
+  { code: "hu", label: "Hungarian", flag: "🇭🇺" },
+  { code: "is", label: "Icelandic", flag: "🇮🇸" },
+  { code: "id", label: "Indonesian", flag: "🇮🇩" },
+  { code: "ga", label: "Irish", flag: "🇮🇪" },
+  { code: "it", label: "Italian", flag: "🇮🇹" },
+  { code: "ja", label: "Japanese", flag: "🇯🇵" },
+  { code: "kn", label: "Kannada", flag: "🇮🇳" },
+  { code: "kk", label: "Kazakh", flag: "🇰🇿" },
+  { code: "km", label: "Khmer", flag: "🇰🇭" },
+  { code: "ko", label: "Korean", flag: "🇰🇷" },
+  { code: "lo", label: "Lao", flag: "🇱🇦" },
+  { code: "lv", label: "Latvian", flag: "🇱🇻" },
+  { code: "lt", label: "Lithuanian", flag: "🇱🇹" },
+  { code: "lb", label: "Luxembourgish", flag: "🇱🇺" },
+  { code: "mk", label: "Macedonian", flag: "🇲🇰" },
+  { code: "ms", label: "Malay", flag: "🇲🇾" },
+  { code: "ml", label: "Malayalam", flag: "🇮🇳" },
+  { code: "mt", label: "Maltese", flag: "🇲🇹" },
+  { code: "mr", label: "Marathi", flag: "🇮🇳" },
+  { code: "mn", label: "Mongolian", flag: "🇲🇳" },
+  { code: "ne", label: "Nepali", flag: "🇳🇵" },
+  { code: "no", label: "Norwegian", flag: "🇳🇴" },
+  { code: "fa", label: "Persian", flag: "🇮🇷" },
+  { code: "pl", label: "Polish", flag: "🇵🇱" },
+  { code: "pt", label: "Portuguese", flag: "🇵🇹" },
+  { code: "pa", label: "Punjabi", flag: "🇮🇳" },
+  { code: "ro", label: "Romanian", flag: "🇷🇴" },
+  { code: "ru", label: "Russian", flag: "🇷🇺" },
+  { code: "sr", label: "Serbian", flag: "🇷🇸" },
+  { code: "si", label: "Sinhala", flag: "🇱🇰" },
+  { code: "sk", label: "Slovak", flag: "🇸🇰" },
+  { code: "sl", label: "Slovenian", flag: "🇸🇮" },
+  { code: "es", label: "Spanish", flag: "🇪🇸" },
+  { code: "sw", label: "Swahili", flag: "🇰🇪" },
+  { code: "sv", label: "Swedish", flag: "🇸🇪" },
+  { code: "ta", label: "Tamil", flag: "🇮🇳" },
+  { code: "te", label: "Telugu", flag: "🇮🇳" },
+  { code: "th", label: "Thai", flag: "🇹🇭" },
+  { code: "tr", label: "Turkish", flag: "🇹🇷" },
+  { code: "uk", label: "Ukrainian", flag: "🇺🇦" },
+  { code: "ur", label: "Urdu", flag: "🇵🇰" },
+  { code: "uz", label: "Uzbek", flag: "🇺🇿" },
+  { code: "vi", label: "Vietnamese", flag: "🇻🇳" },
+  { code: "cy", label: "Welsh" }
+];
+
+export const LANGUAGE_OPTIONS: LanguageOption[] = [
+  { code: "en", label: "English", flag: "🇬🇧" },
+  ...LANGUAGE_OPTIONS_REST.slice().sort((a, b) => a.label.localeCompare(b.label))
+];
+
+const LANGUAGE_BY_CODE = new Map(LANGUAGE_OPTIONS.map((option) => [option.code, option]));
+
+export function getLanguageOption(code: string): LanguageOption | undefined {
+  return LANGUAGE_BY_CODE.get(code);
+}
+
+export function normalizeLanguageCodes(raw?: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw ?? []) {
+    const code = item.trim().toLowerCase();
+    if (!code || code === "any" || seen.has(code)) continue;
+    if (LANGUAGE_BY_CODE.has(code)) {
+      seen.add(code);
+      out.push(code);
+    }
+  }
+  return out.length ? out : [...DEFAULT_LANGUAGES];
+}
 export const EXCLUSION_OPTIONS = ["Horror", "Crime", "Romance", "Drama", "Action", "Thriller", "Comedy"];
 export const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;
 

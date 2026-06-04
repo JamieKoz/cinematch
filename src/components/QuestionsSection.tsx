@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { DeckBuildingOverlay } from "./DeckBuildingOverlay";
+import { LanguageMultiSelect } from "./LanguageMultiSelect";
 import { ReleaseTimeline } from "./ReleaseTimeline";
 import {
   EXCLUSION_OPTIONS,
   FAMILIARITY_OPTIONS,
-  LANGUAGE_OPTIONS,
   MOOD_CHIPS,
   PROVIDER_OPTIONS,
   RUNTIME_OPTIONS,
@@ -178,7 +178,6 @@ export function QuestionsSection(props: {
   onToggleProvider: (provider: string) => void;
   onToggleExclusion: (exclusion: string) => void;
   onToggleMood: (mood: string) => void;
-  onToggleLanguage: (language: string) => void;
   onToggleFamiliarity: (familiarity: "any" | "popular" | "hidden-gems" | "for-kids") => void;
   onClearCache: () => void;
   onStart: () => void;
@@ -195,7 +194,6 @@ export function QuestionsSection(props: {
     onToggleProvider,
     onToggleExclusion,
     onToggleMood,
-    onToggleLanguage,
     onToggleFamiliarity,
     onClearCache,
     onStart
@@ -370,17 +368,17 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "language" ? (
-            <StepFrame step="language" direction={direction} title="Language" subtitle="Original language preference." footer={stepNav}>
-              <ChipGroup>
-                {LANGUAGE_OPTIONS.map((language) => {
-                  const selected = language === "any" ? !answers.languages?.length : answers.languages?.includes(language);
-                  return (
-                    <OptionChip key={language} selected={Boolean(selected)} onClick={() => onToggleLanguage(language)}>
-                      {language === "any" ? "Any language" : language.toUpperCase()}
-                    </OptionChip>
-                  );
-                })}
-              </ChipGroup>
+            <StepFrame
+              step="language"
+              direction={direction}
+              title="Language"
+              subtitle="English is selected by default — add more from the list."
+              footer={stepNav}
+            >
+              <LanguageMultiSelect
+                selected={answers.languages ?? ["en"]}
+                onChange={(languages) => onUpdateAnswers({ languages })}
+              />
             </StepFrame>
           ) : null}
 

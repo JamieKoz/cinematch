@@ -51,7 +51,6 @@ export function App() {
     toggleProvider,
     toggleExclusion,
     toggleMood,
-    toggleLanguage,
     toggleFamiliarity,
     toggleCustomYearRange,
     updateCustomYearRange
@@ -175,7 +174,6 @@ export function App() {
             onToggleProvider={toggleProvider}
             onToggleExclusion={toggleExclusion}
             onToggleMood={toggleMood}
-            onToggleLanguage={toggleLanguage}
             onToggleFamiliarity={toggleFamiliarity}
             onClearCache={handleResetPersonalization}
             onStart={startSwipeRound}
