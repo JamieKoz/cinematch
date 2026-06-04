@@ -26,26 +26,40 @@ export interface TmdbSearchResult {
 
 const API_BASE = "/api/tmdb/3";
 let genreLookupPromise: Promise<Map<number, string>> | null = null;
+const searchCache = new Map<string, Promise<TmdbSearchResult[]>>();
+const detailCache = new Map<string, Promise<TmdbDetailSummary | null>>();
+const ENRICH_CONCURRENCY = 4;
 
 export async function searchTmdbTitle(query: string): Promise<TmdbSearchResult[]> {
-  const response = await fetch(`${API_BASE}/search/multi?query=${encodeURIComponent(query)}&include_adult=false`, {
-    headers: {
-      accept: "application/json"
-    }
-  });
+  const key = query.trim().toLowerCase();
+  if (!key) return [];
+  let cached = searchCache.get(key);
+  if (!cached) {
+    cached = (async () => {
+      const response = await fetch(`${API_BASE}/search/multi?query=${encodeURIComponent(query)}&include_adult=false`, {
+        headers: {
+          accept: "application/json"
+        }
+      });
 
-  if (!response.ok) return [];
+      if (!response.ok) return [];
 
-  const data = (await response.json()) as { results?: TmdbSearchResult[] };
-  return data.results ?? [];
+      const data = (await response.json()) as { results?: TmdbSearchResult[] };
+      return data.results ?? [];
+    })();
+    searchCache.set(key, cached);
+  }
+  return cached;
 }
 
 export async function enrichTitlesWithTmdb(titles: Title[], watchRegion: string): Promise<Title[]> {
   if (titles.length === 0) return titles;
   const genreLookup = await getGenreLookup();
 
-  const enriched = await Promise.all(
-    titles.map(async (title) => {
+  const enriched = await mapWithConcurrency(
+    titles,
+    ENRICH_CONCURRENCY,
+    async (title) => {
       const parsed = parseTmdbCatalogId(title.id);
       let mediaType: "movie" | "tv" | undefined = parsed?.mediaType;
       let tmdbId = parsed?.tmdbId;
@@ -99,7 +113,7 @@ export async function enrichTitlesWithTmdb(titles: Title[], watchRegion: string)
           Boolean(mediaType && tmdbId !== undefined)
         )
       };
-    })
+    }
   );
 
   return enriched;
@@ -119,7 +133,11 @@ export function strictSearchMatch(results: TmdbSearchResult[], titleName: string
   return exact ?? null;
 }
 
-function buildSyntheticAiTitle(suggestion: AiSuggestedTitle, answers: OnboardingAnswers, ordinal: number): Title {
+export function createSyntheticAiTitle(
+  suggestion: AiSuggestedTitle,
+  answers: OnboardingAnswers,
+  ordinal: number
+): Title {
   return {
     id: `ai-${ordinal}-${slugify(suggestion.name)}`,
     name: suggestion.name,
@@ -193,7 +211,7 @@ export async function resolveAiSuggestionsToTitles(
     }
 
     if (!picked) {
-      const syn = buildSyntheticAiTitle(suggestion, answers, resolved.length);
+      const syn = createSyntheticAiTitle(suggestion, answers, resolved.length);
       if (passesAiDeckConstraints(syn, answers) && !used.has(syn.id)) {
         const posterHint = findBestMatch(results, syn);
         picked = {
@@ -283,47 +301,55 @@ async function fetchTmdbDetails(
   watchRegion?: string
 ): Promise<TmdbDetailSummary | null> {
   if (mediaType !== "movie" && mediaType !== "tv") return null;
+  const cacheKey = `${mediaType}:${id}:${watchRegion ?? "none"}`;
+  const cached = detailCache.get(cacheKey);
+  if (cached) return cached;
 
-  const append = watchRegion ? "credits,watch/providers" : "credits";
-  const response = await fetch(`${API_BASE}/${mediaType}/${id}?append_to_response=${append}`, {
-    headers: {
-      accept: "application/json"
+  const task = (async () => {
+    const append = watchRegion ? "credits,watch/providers" : "credits";
+    const response = await fetch(`${API_BASE}/${mediaType}/${id}?append_to_response=${append}`, {
+      headers: {
+        accept: "application/json"
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as TmdbDetailResponseWithProviders;
+    const genres = (data.genres ?? []).map((genre) => genre.name).filter(Boolean);
+    const cast = (data.credits?.cast ?? [])
+      .map((entry) => entry.name?.trim())
+      .filter((name): name is string => Boolean(name))
+      .slice(0, 5);
+
+    const runtimeMinutes = mediaType === "movie"
+      ? data.runtime
+      : data.episode_run_time?.length
+        ? data.episode_run_time[0]
+        : undefined;
+
+    let providers: string[] | undefined;
+    if (watchRegion) {
+      const region = tmdbWatchRegion(watchRegion);
+      const bucket = data["watch/providers"]?.results?.[region];
+      if (bucket?.flatrate?.length) {
+        providers = mapTmdbProvidersToCanonical(bucket.flatrate);
+      }
     }
-  });
 
-  if (!response.ok) return null;
+    return {
+      overview: data.overview,
+      posterPath: data.poster_path ?? null,
+      genres,
+      cast: cast.length ? cast : undefined,
+      voteAverage: data.vote_average,
+      runtimeMinutes,
+      providers
+    };
+  })();
 
-  const data = (await response.json()) as TmdbDetailResponseWithProviders;
-  const genres = (data.genres ?? []).map((genre) => genre.name).filter(Boolean);
-  const cast = (data.credits?.cast ?? [])
-    .map((entry) => entry.name?.trim())
-    .filter((name): name is string => Boolean(name))
-    .slice(0, 5);
-
-  const runtimeMinutes = mediaType === "movie"
-    ? data.runtime
-    : data.episode_run_time?.length
-      ? data.episode_run_time[0]
-      : undefined;
-
-  let providers: string[] | undefined;
-  if (watchRegion) {
-    const region = tmdbWatchRegion(watchRegion);
-    const bucket = data["watch/providers"]?.results?.[region];
-    if (bucket?.flatrate?.length) {
-      providers = mapTmdbProvidersToCanonical(bucket.flatrate);
-    }
-  }
-
-  return {
-    overview: data.overview,
-    posterPath: data.poster_path ?? null,
-    genres,
-    cast: cast.length ? cast : undefined,
-    voteAverage: data.vote_average,
-    runtimeMinutes,
-    providers
-  };
+  detailCache.set(cacheKey, task);
+  return task;
 }
 
 async function getGenreLookup(): Promise<Map<number, string>> {
@@ -356,4 +382,26 @@ async function getGenreLookup(): Promise<Map<number, string>> {
   })();
 
   return genreLookupPromise;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (values.length === 0) return [];
+  const size = Math.max(1, Math.min(concurrency, values.length));
+  const out = new Array<R>(values.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < values.length) {
+      const current = nextIndex;
+      nextIndex += 1;
+      out[current] = await mapper(values[current]!, current);
+    }
+  }
+
+  await Promise.all(Array.from({ length: size }, () => worker()));
+  return out;
 }

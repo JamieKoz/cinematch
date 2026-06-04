@@ -1,6 +1,7 @@
 import { YEAR_MAX, YEAR_MIN } from "../config/options";
 import type { OnboardingAnswers, SessionState, TasteProfile } from "../types";
 import { deriveSmartDefaultsFromProfile } from "../utils/appState";
+import { sessionReducer } from "../state/sessionReducer";
 
 export function useQuickSetup(params: {
   answers: OnboardingAnswers;
@@ -17,13 +18,7 @@ export function useQuickSetup(params: {
     : 100;
 
   function updateAnswers(next: Partial<OnboardingAnswers>) {
-    setSession((prev) => ({
-      ...prev,
-      answers: {
-        ...prev.answers,
-        ...next
-      }
-    }));
+    setSession((prev) => sessionReducer(prev, { type: "UPDATE_ANSWERS", next }));
   }
 
   function beginOnboarding() {

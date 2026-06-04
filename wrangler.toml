@@ -9,6 +9,9 @@ main = "./worker/index.ts"
 not_found_handling = "single-page-application"
 run_worker_first = [ "/api/*" ]
 
+[observability]
+enabled = true
+
 # Rate limiting (per-IP daily AI cap). Create namespaces, then paste IDs:
 #   npx wrangler kv namespace create RATE_KV
 #   npx wrangler kv namespace create RATE_KV --preview
@@ -16,3 +19,11 @@ run_worker_first = [ "/api/*" ]
 binding = "RATE_KV"
 id = "1ad424ad842f413aa65877cdd5024586"
 preview_id = "d29d5a57fa484536bb1637389357f95b"
+
+[[durable_objects.bindings]]
+name = "RATE_LIMITER"
+class_name = "DailyRateLimiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DailyRateLimiter"]

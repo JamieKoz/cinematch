@@ -17,10 +17,14 @@ export interface Env {
   TURNSTILE_SITE_KEY?: string;
   AI_DAILY_LIMIT?: string;
   RATE_KV?: KVNamespace;
+  RATE_LIMITER?: DurableObjectNamespace;
 }
 
 const OPENAI_PATH = "/api/openai/chat/completions";
 const TMDB_PREFIX = "/api/tmdb";
+const MAX_OPENAI_MAX_TOKENS = 1_200;
+const MAX_OPENAI_MESSAGES = 40;
+const MAX_OPENAI_REQUEST_BYTES = 50_000;
 
 function json(data: unknown, status = 200, extraHeaders?: Record<string, string>): Response {
   const headers = new Headers({ "content-type": "application/json" });
@@ -35,6 +39,69 @@ function openAiBaseUrl(env: Env): string {
   return raw;
 }
 
+function parseAllowedModels(env: Env): string[] {
+  return (env.AI_MODELS ?? "gpt-4.1-mini")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+}
+
+function sanitizeOpenAiPayload(
+  body: unknown,
+  allowedModels: string[]
+): { value: Record<string, unknown> } | { error: string; status: number } {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "Invalid JSON body", status: 400 };
+  }
+  const payload = { ...(body as Record<string, unknown>) };
+  const model = payload.model;
+  if (typeof model !== "string" || !allowedModels.includes(model)) {
+    return { error: "Model is not allowed", status: 400 };
+  }
+  const messages = payload.messages;
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_OPENAI_MESSAGES) {
+    return { error: "Invalid messages payload", status: 400 };
+  }
+  const maxTokens = payload.max_tokens;
+  if (typeof maxTokens === "number") {
+    payload.max_tokens = Math.min(Math.floor(maxTokens), MAX_OPENAI_MAX_TOKENS);
+  }
+  return { value: payload };
+}
+
+function isAllowedTmdbPath(rest: string): boolean {
+  if (rest === "/3/search/multi") return true;
+  if (rest === "/3/genre/movie/list" || rest === "/3/genre/tv/list") return true;
+  if (/^\/3\/(movie|tv)\/\d+$/.test(rest)) return true;
+  if (/^\/3\/(movie|tv)\/\d+\/watch\/providers$/.test(rest)) return true;
+  return false;
+}
+
+interface DoRateResponse {
+  allowed: boolean;
+  count: number;
+  limit: number;
+}
+
+async function checkAndIncrementDailyLimitViaDo(
+  namespace: DurableObjectNamespace,
+  ip: string,
+  limit: number
+): Promise<DoRateResponse> {
+  const day = new Date().toISOString().slice(0, 10);
+  const id = namespace.idFromName(`ai:${ip}:${day}`);
+  const stub = namespace.get(id);
+  const response = await stub.fetch("https://internal/rate/increment", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ limit })
+  });
+  if (!response.ok) {
+    throw new Error(`Rate limiter DO failed: HTTP ${response.status}`);
+  }
+  return (await response.json()) as DoRateResponse;
+}
+
 async function gateOpenAiRequest(request: Request, env: Env): Promise<Response | null> {
   const ip = clientIp(request);
   const limit = parseAiDailyLimit(env.AI_DAILY_LIMIT);
@@ -47,8 +114,10 @@ async function gateOpenAiRequest(request: Request, env: Env): Promise<Response |
     }
   }
 
-  if (env.RATE_KV) {
-    const rate = await checkAndIncrementDailyLimit(env.RATE_KV, ip, limit);
+  if (env.RATE_LIMITER || env.RATE_KV) {
+    const rate = env.RATE_LIMITER
+      ? await checkAndIncrementDailyLimitViaDo(env.RATE_LIMITER, ip, limit)
+      : await checkAndIncrementDailyLimit(env.RATE_KV!, ip, limit);
     if (!rate.allowed) {
       return json(
         {
@@ -79,10 +148,7 @@ export default {
     }
 
     if (url.pathname === "/api/config" && request.method === "GET") {
-      const openaiModels = (env.AI_MODELS ?? "gpt-4.1-mini")
-        .split(",")
-        .map((m) => m.trim())
-        .filter(Boolean);
+      const openaiModels = parseAllowedModels(env);
       const aiDailyLimit = parseAiDailyLimit(env.AI_DAILY_LIMIT);
       return json({
         ai: Boolean(env.OPENAI_API_KEY),
@@ -101,22 +167,42 @@ export default {
       const gate = await gateOpenAiRequest(request, env);
       if (gate) return gate;
 
+      const contentLength = Number(request.headers.get("content-length") ?? "0");
+      if (Number.isFinite(contentLength) && contentLength > MAX_OPENAI_REQUEST_BYTES) {
+        return json({ error: "Request body too large" }, 413);
+      }
+
+      let parsedBody: unknown;
+      try {
+        parsedBody = await request.json();
+      } catch {
+        return json({ error: "Invalid JSON body" }, 400);
+      }
+
+      const sanitized = sanitizeOpenAiPayload(parsedBody, parseAllowedModels(env));
+      if ("error" in sanitized) {
+        return json({ error: sanitized.error }, sanitized.status);
+      }
+
       const upstreamUrl = `${openAiBaseUrl(env)}/chat/completions`;
-      const contentType = request.headers.get("content-type") ?? "application/json";
+      try {
+        const upstream = await fetch(upstreamUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(sanitized.value)
+        });
 
-      const upstream = await fetch(upstreamUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": contentType
-        },
-        body: request.body
-      });
-
-      const headers = new Headers();
-      const resCt = upstream.headers.get("content-type");
-      if (resCt) headers.set("content-type", resCt);
-      return new Response(upstream.body, { status: upstream.status, headers });
+        const headers = new Headers();
+        const resCt = upstream.headers.get("content-type");
+        if (resCt) headers.set("content-type", resCt);
+        return new Response(upstream.body, { status: upstream.status, headers });
+      } catch (error) {
+        console.error("openai upstream request failed", error);
+        return json({ error: "Upstream OpenAI request failed" }, 502);
+      }
     }
 
     if (url.pathname.startsWith(`${TMDB_PREFIX}/`) && request.method === "GET") {
@@ -124,14 +210,22 @@ export default {
       if (!token) return json({ error: "TMDB is not configured" }, 503);
 
       const rest = url.pathname.slice(TMDB_PREFIX.length);
+      if (!isAllowedTmdbPath(rest)) {
+        return json({ error: "TMDB path is not allowed" }, 400);
+      }
       const target = new URL(`https://api.themoviedb.org${rest}${url.search}`);
 
-      return fetch(target, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          accept: "application/json"
-        }
-      });
+      try {
+        return await fetch(target, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            accept: "application/json"
+          }
+        });
+      } catch (error) {
+        console.error("tmdb upstream request failed", error);
+        return json({ error: "Upstream TMDB request failed" }, 502);
+      }
     }
 
     if (url.pathname.startsWith("/api/")) {
@@ -141,3 +235,36 @@ export default {
     return new Response(null, { status: 404 });
   }
 } satisfies ExportedHandler<Env>;
+
+export class DailyRateLimiter implements DurableObject {
+  constructor(private readonly state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+    const payload = (await request.json().catch(() => null)) as { limit?: unknown } | null;
+    const limit = typeof payload?.limit === "number" ? Math.floor(payload.limit) : NaN;
+    if (!Number.isFinite(limit) || limit < 1) {
+      return new Response(JSON.stringify({ error: "Invalid limit" }), {
+        status: 400,
+        headers: { "content-type": "application/json" }
+      });
+    }
+
+    const current = ((await this.state.storage.get<number>("count")) ?? 0) as number;
+    if (current >= limit) {
+      return new Response(JSON.stringify({ allowed: false, count: current, limit }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    }
+
+    const next = current + 1;
+    await this.state.storage.put("count", next);
+    return new Response(JSON.stringify({ allowed: true, count: next, limit }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+  }
+}

@@ -3,7 +3,7 @@ import type { OnboardingAnswers } from "../types";
 /** Pure swipe-end logic (mirrors useSessionFlow when the deck is exhausted). */
 export function phaseAfterDeckExhausted(
   shortlist: string[],
-  passed: string[]
+  _passed: string[]
 ): "showdown" | "result" | "questions" {
   if (shortlist.length >= 2) return "showdown";
   if (shortlist.length === 1) return "result";

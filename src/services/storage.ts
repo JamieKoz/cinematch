@@ -14,13 +14,46 @@ const PROFILE_KEY = "cinematch.tasteProfile.v1";
 const ANSWERS_KEY = "cinematch.lastAnswers.v1";
 const VIEWER_PREFS_KEY = "cinematch.viewerPrefs.v1";
 
+function isBrowser(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function safeGetItem(key: string): string | null {
+  if (!isBrowser()) return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore write failures (private mode/quota) and keep app usable.
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage removal failures.
+  }
+}
+
 export function loadProfile(): TasteProfile {
-  const raw = window.localStorage.getItem(PROFILE_KEY);
+  const raw = safeGetItem(PROFILE_KEY);
   if (!raw) return createDefaultProfile();
 
   try {
     const parsed = JSON.parse(raw) as Partial<TasteProfile>;
-    if (parsed.version !== 1) return createDefaultProfile();
+    if (parsed.version !== 1) {
+      return migrateProfile(parsed);
+    }
     return {
       ...createDefaultProfile(),
       ...parsed,
@@ -39,11 +72,11 @@ export function loadProfile(): TasteProfile {
 }
 
 export function saveProfile(profile: TasteProfile): void {
-  window.localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  safeSetItem(PROFILE_KEY, JSON.stringify(profile));
 }
 
 export function loadLastAnswers(): Partial<OnboardingAnswers> {
-  const raw = window.localStorage.getItem(ANSWERS_KEY);
+  const raw = safeGetItem(ANSWERS_KEY);
   if (!raw) return {};
   try {
     return JSON.parse(raw) as Partial<OnboardingAnswers>;
@@ -53,16 +86,18 @@ export function loadLastAnswers(): Partial<OnboardingAnswers> {
 }
 
 export function saveLastAnswers(answers: OnboardingAnswers): void {
-  window.localStorage.setItem(ANSWERS_KEY, JSON.stringify(answers));
+  safeSetItem(ANSWERS_KEY, JSON.stringify(answers));
 }
 
 export function loadViewerPrefsFromStorage(): ViewerPrefs {
-  const raw = window.localStorage.getItem(VIEWER_PREFS_KEY);
+  const raw = safeGetItem(VIEWER_PREFS_KEY);
   if (!raw) return createDefaultViewerPrefs();
 
   try {
     const parsed = JSON.parse(raw) as Partial<ViewerPrefs>;
-    if (parsed.version !== 1) return createDefaultViewerPrefs();
+    if (parsed.version !== 1) {
+      return migrateViewerPrefs(parsed);
+    }
     return {
       version: 1,
       watchRegion: normalizeWatchRegion(parsed.watchRegion),
@@ -75,11 +110,37 @@ export function loadViewerPrefsFromStorage(): ViewerPrefs {
 }
 
 export function saveViewerPrefsToStorage(prefs: ViewerPrefs): void {
-  window.localStorage.setItem(VIEWER_PREFS_KEY, JSON.stringify(prefs));
+  safeSetItem(VIEWER_PREFS_KEY, JSON.stringify(prefs));
 }
 
 export function resetPersonalization(): void {
-  window.localStorage.removeItem(PROFILE_KEY);
-  window.localStorage.removeItem(ANSWERS_KEY);
-  window.localStorage.removeItem(VIEWER_PREFS_KEY);
+  safeRemoveItem(PROFILE_KEY);
+  safeRemoveItem(ANSWERS_KEY);
+  safeRemoveItem(VIEWER_PREFS_KEY);
+}
+
+function migrateProfile(parsed: Partial<TasteProfile>): TasteProfile {
+  // v0 or unknown versions: best-effort merge into current defaults.
+  return {
+    ...createDefaultProfile(),
+    ...parsed,
+    version: 1,
+    runtimeAffinity: {
+      ...createDefaultProfile().runtimeAffinity,
+      ...(parsed.runtimeAffinity ?? {})
+    },
+    typeAffinity: {
+      ...createDefaultProfile().typeAffinity,
+      ...(parsed.typeAffinity ?? {})
+    }
+  };
+}
+
+function migrateViewerPrefs(parsed: Partial<ViewerPrefs>): ViewerPrefs {
+  return {
+    version: 1,
+    watchRegion: normalizeWatchRegion(parsed.watchRegion ?? DEFAULT_WATCH_REGION),
+    source: parsed.source === "manual" ? "manual" : "auto",
+    detectedAt: typeof parsed.detectedAt === "string" ? parsed.detectedAt : undefined
+  };
 }

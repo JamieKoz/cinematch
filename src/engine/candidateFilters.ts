@@ -1,11 +1,10 @@
 import type { OnboardingAnswers, TasteProfile, Title } from "../types";
 import { runtimeBucketFromMinutes } from "./scoring";
+import { hasExcludedGenre, matchesCustomYearRange, matchesReleaseWindow } from "./constraints";
 
 /** For AI-curated picks: honor hard genre exclusions and movie/series preference only (release/runtime/provider already inform the model). */
 export function passesAiDeckConstraints(title: Title, answers: OnboardingAnswers): boolean {
-  if (answers.hardExclusions?.length) {
-    if (title.genres.some((genre) => answers.hardExclusions?.includes(genre))) return false;
-  }
+  if (hasExcludedGenre(title, answers.hardExclusions)) return false;
 
   if (answers.preferredType && answers.preferredType !== "either" && title.type !== answers.preferredType) {
     return false;
@@ -15,9 +14,7 @@ export function passesAiDeckConstraints(title: Title, answers: OnboardingAnswers
 }
 
 export function passesCandidateConstraints(title: Title, answers: OnboardingAnswers): boolean {
-  if (answers.hardExclusions?.length) {
-    if (title.genres.some((genre) => answers.hardExclusions?.includes(genre))) return false;
-  }
+  if (hasExcludedGenre(title, answers.hardExclusions)) return false;
 
   if (answers.preferredType && answers.preferredType !== "either" && title.type !== answers.preferredType) {
     return false;
@@ -31,23 +28,9 @@ export function passesCandidateConstraints(title: Title, answers: OnboardingAnsw
     return false;
   }
 
-  if (answers.releaseWindow && answers.releaseWindow !== "any") {
-    const year = title.releaseYear;
-    const in2020s = year >= 2020;
-    const in2010s = year >= 2010 && year <= 2019;
-    const in2000s = year >= 2000 && year <= 2009;
-    const pre2000 = year < 2000;
+  if (!matchesReleaseWindow(title.releaseYear, answers.releaseWindow)) return false;
 
-    if (answers.releaseWindow === "2020s" && !in2020s) return false;
-    if (answers.releaseWindow === "2010s" && !in2010s) return false;
-    if (answers.releaseWindow === "2000s" && !in2000s) return false;
-    if (answers.releaseWindow === "pre-2000" && !pre2000) return false;
-  }
-
-  if (answers.customYearRange) {
-    const { min, max } = answers.customYearRange;
-    if (title.releaseYear < min || title.releaseYear > max) return false;
-  }
+  if (!matchesCustomYearRange(title.releaseYear, answers.customYearRange)) return false;
 
   if (answers.providers?.length) {
     const matchesProvider = title.providers.some((provider) => answers.providers?.includes(provider));

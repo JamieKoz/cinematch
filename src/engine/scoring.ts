@@ -1,7 +1,38 @@
 import type { OnboardingAnswers, RuntimeBucket, ScoreInput, TasteProfile, Title } from "../types";
+import { hasExcludedGenre, matchesCustomYearRange, matchesReleaseWindow } from "./constraints";
 
 const KIDS_FRIENDLY_GENRES = new Set(["adventure", "comedy", "fantasy", "slice-of-life", "music"]);
 const KIDS_UNFRIENDLY_GENRES = new Set(["crime", "thriller", "horror", "mystery", "legal"]);
+const HARD_REJECT_SCORE = -9999;
+
+const SCORING_WEIGHTS = {
+  likedBoost: 1.4,
+  preferredTypePenalty: 2,
+  runtimePenalty: 1.5,
+  languagePenalty: 1,
+  releaseWindowPenalty: 1.5,
+  moodMatchBoost: 3,
+  keywordBoost: 1.2,
+  providerMatchBoost: 2,
+  seenPenalty: 2.5,
+  popularityWeight: 0.8,
+  recencyWeight: 0.4,
+  familiarityPopularWeight: 0.9,
+  familiarityHiddenGemsWeight: 0.9,
+  familiarityAcclaimedWeight: 1.4,
+  kidsFriendlyWeight: 1.4,
+  kidsUnfriendlyPenalty: 1.8,
+  adultsFriendlyPenalty: 1.3,
+  adultsUnfriendlyWeight: 0.4,
+  affinity: {
+    genre: 0.8,
+    mood: 0.9,
+    runtime: 0.7,
+    type: 0.8,
+    language: 0.5,
+    provider: 0.4
+  }
+} as const;
 
 export function runtimeBucketFromMinutes(minutes: number): RuntimeBucket {
   if (minutes < 90) return "short";
@@ -12,113 +43,82 @@ export function runtimeBucketFromMinutes(minutes: number): RuntimeBucket {
 export function scoreCandidate({ title, answers, profile }: ScoreInput): number {
   let score = 0;
 
-  if (profile.rejectedIds.includes(title.id)) return -9999;
+  if (profile.rejectedIds.includes(title.id)) return HARD_REJECT_SCORE;
 
   if (profile.likedIds.includes(title.id)) {
-    score += 1.4;
+    score += SCORING_WEIGHTS.likedBoost;
   }
 
-  if (answers.hardExclusions?.length) {
-    const excluded = title.genres.some((genre) => answers.hardExclusions?.includes(genre));
-    if (excluded) return -9999;
-  }
+  if (hasExcludedGenre(title, answers.hardExclusions)) return HARD_REJECT_SCORE;
 
   if (answers.preferredType && answers.preferredType !== "either" && title.type !== answers.preferredType) {
-    score -= 2;
+    score -= SCORING_WEIGHTS.preferredTypePenalty;
   }
 
   const bucket = runtimeBucketFromMinutes(title.runtimeMinutes);
   if (answers.runtime && answers.runtime !== "any" && bucket !== answers.runtime) {
-    score -= 1.5;
+    score -= SCORING_WEIGHTS.runtimePenalty;
   }
 
   if (answers.languages?.length && !answers.languages.includes(title.language)) {
-    score -= 1;
+    score -= SCORING_WEIGHTS.languagePenalty;
   }
 
-  if (answers.releaseWindow && answers.releaseWindow !== "any") {
-    const year = title.releaseYear;
-    const in2020s = year >= 2020;
-    const in2010s = year >= 2010 && year <= 2019;
-    const in2000s = year >= 2000 && year <= 2009;
-    const pre2000 = year < 2000;
-
-    if (answers.releaseWindow === "2020s" && !in2020s) score -= 1.5;
-    if (answers.releaseWindow === "2010s" && !in2010s) score -= 1.5;
-    if (answers.releaseWindow === "2000s" && !in2000s) score -= 1.5;
-    if (answers.releaseWindow === "pre-2000" && !pre2000) score -= 1.5;
+  if (!matchesReleaseWindow(title.releaseYear, answers.releaseWindow)) {
+    score -= SCORING_WEIGHTS.releaseWindowPenalty;
   }
 
-  if (answers.customYearRange) {
-    const { min, max } = answers.customYearRange;
-    if (title.releaseYear < min || title.releaseYear > max) {
-      return -9999;
-    }
-  }
+  if (!matchesCustomYearRange(title.releaseYear, answers.customYearRange)) return HARD_REJECT_SCORE;
 
   if (answers.moods?.length && title.moods.some((mood) => answers.moods?.includes(mood))) {
-    score += 3;
+    score += SCORING_WEIGHTS.moodMatchBoost;
   }
 
   if (answers.keywords?.length) {
     const searchable = [title.name, title.overview, ...title.genres, ...title.moods].join(" ").toLowerCase();
     for (const keyword of answers.keywords) {
       if (searchable.includes(keyword.toLowerCase())) {
-        score += 1.2;
+        score += SCORING_WEIGHTS.keywordBoost;
       }
     }
   }
 
   if (answers.providers?.length) {
     const matchesProvider = title.providers.some((provider) => answers.providers?.includes(provider));
-    if (matchesProvider) score += 2;
+    if (matchesProvider) score += SCORING_WEIGHTS.providerMatchBoost;
   }
 
-  for (const genre of title.genres) {
-    score += (profile.genreAffinity[genre] ?? 0) * 0.8;
-  }
-
-  for (const mood of title.moods) {
-    score += (profile.moodAffinity[mood] ?? 0) * 0.9;
-  }
-
-  score += (profile.runtimeAffinity[bucket] ?? 0) * 0.7;
-  score += (profile.typeAffinity[title.type] ?? 0) * 0.8;
-  score += (profile.languageAffinity[title.language] ?? 0) * 0.5;
-
-  for (const provider of title.providers) {
-    score += (profile.providerAffinity[provider] ?? 0) * 0.4;
-  }
+  score += affinityScore(title, profile, bucket);
 
   if (profile.seenIds.includes(title.id)) {
-    score -= 2.5;
+    score -= SCORING_WEIGHTS.seenPenalty;
   }
 
-  score += title.popularity * 0.8;
-  score += normalizeRecency(title.releaseYear) * 0.4;
+  score += title.popularity * SCORING_WEIGHTS.popularityWeight;
+  score += normalizeRecency(title.releaseYear) * SCORING_WEIGHTS.recencyWeight;
 
   if (answers.familiarities?.includes("popular")) {
-    score += title.popularity * 0.9;
+    score += title.popularity * SCORING_WEIGHTS.familiarityPopularWeight;
   }
   if (answers.familiarities?.includes("hidden-gems")) {
-    score += (1 - title.popularity) * 0.9;
+    score += (1 - title.popularity) * SCORING_WEIGHTS.familiarityHiddenGemsWeight;
   }
 
   if (answers.familiarities?.includes("acclaimed")) {
-    score += (title.rating ?? 0.55) * 1.4;
+    score += (title.rating ?? 0.55) * SCORING_WEIGHTS.familiarityAcclaimedWeight;
   }
 
   const friendlyMatches = title.genres.filter((genre) => KIDS_FRIENDLY_GENRES.has(genre)).length;
   const unfriendlyMatches = title.genres.filter((genre) => KIDS_UNFRIENDLY_GENRES.has(genre)).length;
 
   if (answers.familiarities?.includes("for-kids")) {
-    score += friendlyMatches * 1.4;
-    score -= unfriendlyMatches * 1.8;
+    score += friendlyMatches * SCORING_WEIGHTS.kidsFriendlyWeight;
+    score -= unfriendlyMatches * SCORING_WEIGHTS.kidsUnfriendlyPenalty;
   }
 
   if (answers.familiarities?.includes("adults-only")) {
-    score -= friendlyMatches * 1.3;
-    score += unfriendlyMatches * 0.4;
+    score -= friendlyMatches * SCORING_WEIGHTS.adultsFriendlyPenalty;
+    score += unfriendlyMatches * SCORING_WEIGHTS.adultsUnfriendlyWeight;
   }
 
   return score;
@@ -140,4 +140,21 @@ function normalizeRecency(year: number): number {
   if (diff <= 6) return 0.6;
   if (diff <= 10) return 0.3;
   return 0.1;
+}
+
+function affinityScore(title: Title, profile: TasteProfile, bucket: RuntimeBucket): number {
+  let score = 0;
+  for (const genre of title.genres) {
+    score += (profile.genreAffinity[genre] ?? 0) * SCORING_WEIGHTS.affinity.genre;
+  }
+  for (const mood of title.moods) {
+    score += (profile.moodAffinity[mood] ?? 0) * SCORING_WEIGHTS.affinity.mood;
+  }
+  score += (profile.runtimeAffinity[bucket] ?? 0) * SCORING_WEIGHTS.affinity.runtime;
+  score += (profile.typeAffinity[title.type] ?? 0) * SCORING_WEIGHTS.affinity.type;
+  score += (profile.languageAffinity[title.language] ?? 0) * SCORING_WEIGHTS.affinity.language;
+  for (const provider of title.providers) {
+    score += (profile.providerAffinity[provider] ?? 0) * SCORING_WEIGHTS.affinity.provider;
+  }
+  return score;
 }

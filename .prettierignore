@@ -1,0 +1,11 @@
+dist
+.wrangler
+node_modules
+package-lock.json
+public/thumbnails
+public/providers
+*.tsbuildinfo
+worker/index.js
+worker/index.d.ts
+vite.config.js
+vite.config.d.ts

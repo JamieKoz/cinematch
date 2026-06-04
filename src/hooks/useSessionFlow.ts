@@ -1,22 +1,13 @@
 import { useState } from "react";
-import { passesCandidateConstraints, prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultProfile } from "../engine/profile";
-import { rankTitles } from "../engine/scoring";
-import type { AiHistoryHints } from "../services/ai";
-import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "../services/ai";
 import { saveLastAnswers } from "../services/storage";
 import { trackEvent } from "../services/analytics";
 import { apiGateUserMessage } from "../services/apiErrors";
-import { loadBackendConfig } from "../services/backendConfig";
-import { enrichTitlesWithTmdb, resolveAiSuggestionsToTitles } from "../services/tmdb";
-import { buildDeck, createSession, fillDeckFromSources } from "../state/machine";
-import {
-  phaseAfterDeckExhausted,
-  resultFromSingleKeep,
-  retryAnswersAfterEmptyKeep
-} from "../state/swipeAdvance";
-import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
-import { cloneProfile, cloneSession, mergeCatalog, slugify } from "../utils/appState";
+import type { SessionState, TasteProfile, Title } from "../types";
+import { cloneProfile, cloneSession, mergeCatalog } from "../utils/appState";
+import { sessionReducer } from "../state/sessionReducer";
+import { buildRecommendationDeck } from "../services/deckBuilder";
+import { nextPair } from "../state/machine";
 
 export function useSessionFlow(params: {
   session: SessionState;
@@ -27,8 +18,6 @@ export function useSessionFlow(params: {
   setCatalog: React.Dispatch<React.SetStateAction<Title[]>>;
   watchRegion: string;
   currentTitle?: Title;
-  showdownLeft?: Title;
-  showdownRight?: Title;
   winner?: Title;
 }) {
   const {
@@ -40,31 +29,12 @@ export function useSessionFlow(params: {
     setCatalog,
     watchRegion,
     currentTitle,
-    showdownLeft,
-    showdownRight,
     winner
   } = params;
 
   const [isBuildingDeck, setIsBuildingDeck] = useState(false);
   const [deckBuildError, setDeckBuildError] = useState<string | null>(null);
   const [lastSwipeSnapshot, setLastSwipeSnapshot] = useState<{ session: SessionState; profile: TasteProfile } | null>(null);
-
-  function buildHistoryHints(): AiHistoryHints {
-    const byId = new Map(catalog.map((title) => [title.id, title]));
-    const namesFrom = (ids: string[], cap: number) =>
-      ids
-        .slice(-cap)
-        .map((id) => byId.get(id)?.name)
-        .filter((name): name is string => Boolean(name));
-
-    return {
-      likedSample: namesFrom(profile.likedIds, 14),
-      rejectedSample: namesFrom(profile.rejectedIds, 10),
-      seenSample: namesFrom(profile.seenIds, 10),
-      lastChosenLabel: profile.lastChosenTitle ? byId.get(profile.lastChosenTitle)?.name : undefined,
-      sessionCount: profile.sessionCount
-    };
-  }
 
   async function startSwipeRound() {
     setIsBuildingDeck(true);
@@ -76,87 +46,19 @@ export function useSessionFlow(params: {
     });
 
     try {
-      const { ai: aiEnabled, tmdb: tmdbEnabled } = await loadBackendConfig();
-      let deckTitles: Title[] = [];
-
-      if (aiEnabled) {
-        const historyHints = buildHistoryHints();
-        const generated = await generateSuggestionsWithAi({
-          answers: session.answers,
-          profile,
-          count: 10,
-          watchRegion,
-          historyHints
-        });
-
-        if (generated.length > 0) {
-          if (tmdbEnabled) {
-            deckTitles = await resolveAiSuggestionsToTitles(
-              generated,
-              session.answers,
-              profile,
-              10,
-              watchRegion
-            );
-          } else {
-            deckTitles = generated.map((item, index) => ({
-              id: `ai-${index}-${slugify(item.name)}`,
-              name: item.name,
-              type: item.type,
-              runtimeMinutes: item.type === "series" ? 45 : 110,
-              genres: [],
-              moods: [...(session.answers.moods ?? [])],
-              language: session.answers.languages?.[0] ?? "en",
-              providers: [...(session.answers.providers ?? [])],
-              popularity: 0.6,
-              releaseYear: new Date().getFullYear(),
-              posterPath: null,
-              overview: item.reason ?? "AI-picked for your current vibe."
-            }));
-          }
-        }
-      }
-
-      if (deckTitles.length === 0) {
-        const activeProfile = session.answers.usePersonalization ? profile : createDefaultProfile();
-        const pool = prepareSwipeCandidatePool(catalog, session.answers, activeProfile);
-        const sorted = rankTitles(pool.length ? pool : catalog, session.answers, activeProfile);
-        const top20 = sorted.slice(0, 20);
-        const reranked = await rerankCandidatesWithAi({
-          answers: session.answers,
-          profile: activeProfile,
-          candidates: top20,
-          watchRegion,
-          historyHints: buildHistoryHints()
-        });
-        const baseDeckTitles = (reranked.length ? reranked : top20).slice(0, 10);
-        deckTitles = tmdbEnabled
-          ? await enrichTitlesWithTmdb(baseDeckTitles, watchRegion)
-          : baseDeckTitles;
-      }
+      const activeProfile = session.answers.usePersonalization ? profile : createDefaultProfile();
+      const { deckTitles, deck } = await buildRecommendationDeck({
+        answers: session.answers,
+        profile: activeProfile,
+        catalog,
+        watchRegion
+      });
 
       if (deckTitles.length > 0) {
-        deckTitles = deckTitles.filter((title) => passesCandidateConstraints(title, session.answers));
         setCatalog((prev) => mergeCatalog(prev, deckTitles));
       }
 
-      const catalogForDeck = deckTitles.length > 0 ? mergeCatalog(catalog, deckTitles) : catalog;
-      const primaryIds = deckTitles.map((title) => title.id);
-      const fallbackIds = buildDeck(catalogForDeck, session.answers, profile);
-      const deck =
-        primaryIds.length > 0 ? fillDeckFromSources(primaryIds, fallbackIds) : fallbackIds;
-
-      setSession((prev) => ({
-        ...prev,
-        phase: "swipe",
-        deck,
-        deckCursor: 0,
-        shortlist: [],
-        passed: [],
-        showdownQueue: [],
-        winnerId: undefined,
-        backupId: undefined
-      }));
+      setSession((prev) => sessionReducer(prev, { type: "DECK_READY", deck }));
     } catch (error) {
       const gateMessage = apiGateUserMessage(error);
       setDeckBuildError(
@@ -172,77 +74,20 @@ export function useSessionFlow(params: {
   }
 
   function handleSwipe(action: "keep" | "pass") {
-    if (!currentTitle) return;
+    const titleId = currentTitle?.id;
+    if (!titleId) return;
     setLastSwipeSnapshot({
       session: cloneSession(session),
       profile: cloneProfile(profile)
     });
 
     if (action === "keep") {
-      setProfile((prev) => applyKeepSignal(prev, currentTitle));
+      setProfile((prev) => applyKeepSignal(prev, currentTitle!));
     } else {
-      setProfile((prev) => applyPassSignal(prev, currentTitle));
+      setProfile((prev) => applyPassSignal(prev, currentTitle!));
     }
 
-    setSession((prev) => {
-      const shortlist = action === "keep" ? [...prev.shortlist, currentTitle.id] : prev.shortlist;
-      const passed = action === "pass" ? [...prev.passed, currentTitle.id] : prev.passed;
-      const nextCursor = prev.deckCursor + 1;
-
-      if (shortlist.length >= 5) {
-        return {
-          ...prev,
-          phase: "showdown",
-          shortlist,
-          passed,
-          showdownQueue: [...shortlist]
-        };
-      }
-
-      if (nextCursor >= prev.deck.length) {
-        const endPhase = phaseAfterDeckExhausted(shortlist, passed);
-
-        if (endPhase === "showdown") {
-          return {
-            ...prev,
-            phase: "showdown",
-            shortlist,
-            passed,
-            showdownQueue: [...shortlist]
-          };
-        }
-
-        if (endPhase === "result") {
-          const picked = resultFromSingleKeep(shortlist, passed)!;
-          return {
-            ...prev,
-            phase: "result",
-            shortlist,
-            passed,
-            showdownQueue: [...shortlist],
-            winnerId: picked.winnerId,
-            backupId: picked.backupId
-          };
-        }
-
-        return {
-          ...prev,
-          phase: "questions",
-          shortlist,
-          passed,
-          deck: [],
-          deckCursor: 0,
-          answers: retryAnswersAfterEmptyKeep(prev.answers)
-        };
-      }
-
-      return {
-        ...prev,
-        shortlist,
-        passed,
-        deckCursor: nextCursor
-      };
-    });
+    setSession((prev) => sessionReducer(prev, { type: "SWIPE", action, titleId }));
   }
 
   function handleUndoSwipe() {
@@ -253,31 +98,13 @@ export function useSessionFlow(params: {
   }
 
   function handleShowdownPick(winnerPick: "left" | "right") {
-    if (!showdownLeft || !showdownRight) return;
+    const pair = nextPair(session.showdownQueue);
+    if (!pair) return;
+    const [leftId, rightId] = pair;
+    const winnerId = winnerPick === "left" ? leftId : rightId;
+    const loserId = winnerPick === "left" ? rightId : leftId;
 
-    const winnerId = winnerPick === "left" ? showdownLeft.id : showdownRight.id;
-    const loserId = winnerPick === "left" ? showdownRight.id : showdownLeft.id;
-
-    setSession((prev) => {
-      const [first, second, ...rest] = prev.showdownQueue;
-      if (!first || !second) return prev;
-
-      const nextQueue = [...rest, winnerId];
-      if (nextQueue.length === 1) {
-        return {
-          ...prev,
-          phase: "result",
-          showdownQueue: nextQueue,
-          winnerId,
-          backupId: loserId
-        };
-      }
-
-      return {
-        ...prev,
-        showdownQueue: nextQueue
-      };
-    });
+    setSession((prev) => sessionReducer(prev, { type: "SHOWDOWN_PICK", winnerId, loserId }));
   }
 
   function finalizeDecision() {
@@ -286,14 +113,7 @@ export function useSessionFlow(params: {
   }
 
   function resetAndStartNewRound() {
-    const nextAnswers: OnboardingAnswers = {
-      ...session.answers,
-      quickModeId: undefined
-    };
-    setSession(() => ({
-      ...createSession(nextAnswers),
-      answers: nextAnswers
-    }));
+    setSession((prev) => sessionReducer(prev, { type: "RESET_ROUND" }));
   }
 
   return {

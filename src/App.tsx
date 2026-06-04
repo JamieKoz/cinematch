@@ -93,8 +93,6 @@ export function App() {
     catalog,
     setCatalog,
     currentTitle,
-    showdownLeft,
-    showdownRight,
     winner,
     watchRegion: viewerPrefs.watchRegion
   });
