@@ -10,6 +10,11 @@ import { apiGateUserMessage } from "../services/apiErrors";
 import { loadBackendConfig } from "../services/backendConfig";
 import { enrichTitlesWithTmdb, resolveAiSuggestionsToTitles } from "../services/tmdb";
 import { buildDeck, createSession, fillDeckFromSources } from "../state/machine";
+import {
+  phaseAfterDeckExhausted,
+  resultFromSingleKeep,
+  retryAnswersAfterEmptyKeep
+} from "../state/swipeAdvance";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
 import { cloneProfile, cloneSession, mergeCatalog, slugify } from "../utils/appState";
 
@@ -195,13 +200,28 @@ export function useSessionFlow(params: {
       }
 
       if (nextCursor >= prev.deck.length) {
-        if (shortlist.length >= 2) {
+        const endPhase = phaseAfterDeckExhausted(shortlist, passed);
+
+        if (endPhase === "showdown") {
           return {
             ...prev,
             phase: "showdown",
             shortlist,
             passed,
             showdownQueue: [...shortlist]
+          };
+        }
+
+        if (endPhase === "result") {
+          const picked = resultFromSingleKeep(shortlist, passed)!;
+          return {
+            ...prev,
+            phase: "result",
+            shortlist,
+            passed,
+            showdownQueue: [...shortlist],
+            winnerId: picked.winnerId,
+            backupId: picked.backupId
           };
         }
 
@@ -212,10 +232,7 @@ export function useSessionFlow(params: {
           passed,
           deck: [],
           deckCursor: 0,
-          answers: {
-            ...prev.answers,
-            moods: prev.answers.moods?.includes("light") ? ["intense"] : ["light"]
-          }
+          answers: retryAnswersAfterEmptyKeep(prev.answers)
         };
       }
 
