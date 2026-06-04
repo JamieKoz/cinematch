@@ -94,21 +94,24 @@ function StepFrame({
   direction,
   title,
   subtitle,
+  footer,
   children
 }: {
   step: OnboardingStep;
   direction: TransitionDirection;
   title: string;
   subtitle?: string;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section key={step} className={`onboarding-step onboarding-step--${direction} onboarding-step--centered`}>
+    <section key={step} className={`onboarding-step onboarding-step--${direction} onboarding-step--stacked`}>
       <div className="mb-6 text-center sm:mb-8">
         <h2 className="text-xl font-semibold tracking-tight text-white sm:text-2xl md:text-3xl">{title}</h2>
         {subtitle ? <p className="mt-2 text-sm text-zinc-300 sm:text-base">{subtitle}</p> : null}
       </div>
       {children}
+      {footer}
     </section>
   );
 }
@@ -152,7 +155,7 @@ function OptionChip({
       ? "rounded-full border border-rose-300/70 bg-rose-500/25 px-3 py-1.5 text-sm transition hover:bg-rose-500/35"
       : "rounded-full border border-violet-300/70 bg-violet-500/30 px-3 py-1.5 text-sm transition hover:bg-violet-500/40";
   const defaultClass =
-    "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-white/45 hover:bg-zinc-800/70";
+    "rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-sm transition hover:border-violet-300/55 hover:bg-violet-500/15";
 
   return (
     <button type="button" className={selected ? selectedClass : defaultClass} onClick={onClick}>
@@ -244,6 +247,21 @@ export function QuestionsSection(props: {
   const canAdvanceFromMood = (answers.moods?.length ?? 0) > 0;
   const isLastStep = step === "keywords";
 
+  const stepNav = (
+    <div className="onboarding-nav flex items-center justify-center gap-3">
+      <NavButton onClick={goBack}>Back</NavButton>
+      {isLastStep ? (
+        <NavButton variant="primary" onClick={handleStart} disabled={isBuildingDeck}>
+          {isBuildingDeck ? "Building your deck…" : "Start"}
+        </NavButton>
+      ) : (
+        <NavButton variant="primary" onClick={goNext} disabled={step === "mood" && !canAdvanceFromMood}>
+          Next
+        </NavButton>
+      )}
+    </div>
+  );
+
   return (
     <>
       <div className="onboarding-shell">
@@ -253,7 +271,7 @@ export function QuestionsSection(props: {
 
         <div className="onboarding-content">
           {step === "welcome" ? (
-            <div key="welcome" className="onboarding-step onboarding-step--forward onboarding-step--centered">
+            <div key="welcome" className="onboarding-step onboarding-step--forward onboarding-welcome">
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl md:text-6xl">CineMatch</h1>
               <p className="mt-4 max-w-md text-base text-zinc-300 sm:text-lg">Find the match for your next film.</p>
               <div className="mt-8">
@@ -265,7 +283,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "mood" ? (
-            <StepFrame step="mood" direction={direction} title="What's the mood?" subtitle="Pick one or more.">
+            <StepFrame step="mood" direction={direction} title="What's the mood?" subtitle="Pick one or more." footer={stepNav}>
               <div className="mx-auto grid max-w-2xl grid-cols-2 gap-3 sm:gap-4">
                 {MOOD_CHIPS.map((mood) => {
                   const selected = answers.moods?.includes(mood.value);
@@ -290,7 +308,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "type" ? (
-            <StepFrame step="type" direction={direction} title="Movie or series?" subtitle="What are you watching tonight?">
+            <StepFrame step="type" direction={direction} title="Movie or series?" subtitle="What are you watching tonight?" footer={stepNav}>
               <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-3 sm:gap-4">
                 {TYPE_OPTIONS.map((typeOption) => {
                   const selected = (answers.preferredType ?? "either") === typeOption.value;
@@ -315,7 +333,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "runtime" ? (
-            <StepFrame step="runtime" direction={direction} title="How long?" subtitle="Pick a runtime that fits tonight.">
+            <StepFrame step="runtime" direction={direction} title="How long?" subtitle="Pick a runtime that fits tonight." footer={stepNav}>
               <div className="mx-auto grid max-w-2xl grid-cols-2 gap-3 sm:gap-4">
                 {RUNTIME_OPTIONS.map((runtimeOption) => {
                   const selected = (answers.runtime ?? "any") === runtimeOption.value;
@@ -340,7 +358,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "release" ? (
-            <StepFrame step="release" direction={direction} title="Release date" subtitle="When should it have come out?">
+            <StepFrame step="release" direction={direction} title="Release date" subtitle="When should it have come out?" footer={stepNav}>
               <div className="mx-auto w-full max-w-2xl">
                 <ChipGroup>
                   {RELEASE_WINDOW_OPTIONS.map((window) => {
@@ -410,7 +428,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "language" ? (
-            <StepFrame step="language" direction={direction} title="Language" subtitle="Original language preference.">
+            <StepFrame step="language" direction={direction} title="Language" subtitle="Original language preference." footer={stepNav}>
               <ChipGroup>
                 {LANGUAGE_OPTIONS.map((language) => {
                   const selected = language === "any" ? !answers.languages?.length : answers.languages?.includes(language);
@@ -425,7 +443,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "discovery" ? (
-            <StepFrame step="discovery" direction={direction} title="Discovery style" subtitle="How well-known should picks be?">
+            <StepFrame step="discovery" direction={direction} title="Discovery style" subtitle="How well-known should picks be?" footer={stepNav}>
               <ChipGroup>
                 {FAMILIARITY_OPTIONS.map((familiarity) => {
                   const selected =
@@ -447,26 +465,46 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "provider" ? (
-            <StepFrame step="provider" direction={direction} title="Provider" subtitle="Where do you want to watch?">
-              <ChipGroup>
-                <OptionChip selected={!answers.providers?.length} onClick={() => onUpdateAnswers({ providers: [] })}>
-                  No preference
-                </OptionChip>
-                {PROVIDER_OPTIONS.map((provider) => (
-                  <OptionChip
-                    key={provider}
-                    selected={Boolean(answers.providers?.includes(provider))}
-                    onClick={() => onToggleProvider(provider)}
-                  >
-                    {provider}
-                  </OptionChip>
-                ))}
-              </ChipGroup>
+            <StepFrame step="provider" direction={direction} title="Provider" subtitle="Where do you want to watch?" footer={stepNav}>
+              <div className="onboarding-provider-layout">
+                <button
+                  type="button"
+                  aria-label="No preference"
+                  className={
+                    !answers.providers?.length
+                      ? "onboarding-provider-card onboarding-provider-card--any onboarding-provider-card--selected"
+                      : "onboarding-provider-card onboarding-provider-card--any"
+                  }
+                  onClick={() => onUpdateAnswers({ providers: [] })}
+                >
+                  <span className="onboarding-provider-card__any-label">No preference</span>
+                </button>
+                <div className="onboarding-provider-grid">
+                  {PROVIDER_OPTIONS.map((provider) => {
+                    const selected = answers.providers?.includes(provider.id);
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        aria-label={provider.label}
+                        className={
+                          selected
+                            ? "onboarding-provider-card onboarding-provider-card--wide onboarding-provider-card--selected"
+                            : "onboarding-provider-card onboarding-provider-card--wide"
+                        }
+                        onClick={() => onToggleProvider(provider.id)}
+                      >
+                        <img src={provider.logoSrc} alt="" className="onboarding-provider-card__logo" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </StepFrame>
           ) : null}
 
           {step === "avoid" ? (
-            <StepFrame step="avoid" direction={direction} title="Avoid tonight" subtitle="Genres to skip this session.">
+            <StepFrame step="avoid" direction={direction} title="Avoid tonight" subtitle="Genres to skip this session." footer={stepNav}>
               <ChipGroup>
                 {EXCLUSION_OPTIONS.map((exclusion) => (
                   <OptionChip
@@ -483,7 +521,7 @@ export function QuestionsSection(props: {
           ) : null}
 
           {step === "keywords" ? (
-            <StepFrame step="keywords" direction={direction} title="Keywords" subtitle="Optional — comma-separated vibes or themes.">
+            <StepFrame step="keywords" direction={direction} title="Keywords" subtitle="Optional — comma-separated vibes or themes." footer={stepNav}>
               <div className="mx-auto w-full max-w-md">
                 <input
                   className="w-full rounded-xl border border-white/25 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-100 outline-none backdrop-blur-md placeholder:text-zinc-400"
@@ -503,21 +541,6 @@ export function QuestionsSection(props: {
             </StepFrame>
           ) : null}
         </div>
-
-        {step !== "welcome" ? (
-          <div className="onboarding-nav mt-6 flex items-center justify-center gap-3 sm:mt-8">
-            <NavButton onClick={goBack}>Back</NavButton>
-            {isLastStep ? (
-              <NavButton variant="primary" onClick={handleStart} disabled={isBuildingDeck}>
-                {isBuildingDeck ? "Building your deck…" : "Start"}
-              </NavButton>
-            ) : (
-              <NavButton variant="primary" onClick={goNext} disabled={step === "mood" && !canAdvanceFromMood}>
-                Next
-              </NavButton>
-            )}
-          </div>
-        ) : null}
       </div>
 
       {isBuildingDeck ? <DeckBuildingOverlay /> : null}

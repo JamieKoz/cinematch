@@ -38,7 +38,55 @@ export function normalizeMoodList(raw?: string[] | string): string[] {
   }
   return out;
 }
-export const PROVIDER_OPTIONS = ["Netflix", "Prime", "Hulu", "HBO Max", "Apple", "Disney"];
+export type ProviderOption = {
+  id: string;
+  label: string;
+  logoSrc: string;
+};
+
+export const PROVIDER_OPTIONS: ProviderOption[] = [
+  { id: "netflix", label: "Netflix", logoSrc: "/providers/netflix.svg" },
+  { id: "prime", label: "Prime", logoSrc: "/providers/prime.svg" },
+  { id: "hulu", label: "Hulu", logoSrc: "/providers/hulu.svg" },
+  { id: "max", label: "Max", logoSrc: "/providers/max.svg" },
+  { id: "apple", label: "Apple TV+", logoSrc: "/providers/apple.svg" },
+  { id: "disney", label: "Disney+", logoSrc: "/providers/disney.svg" }
+];
+
+const LEGACY_PROVIDER_IDS: Record<string, string> = {
+  netflix: "netflix",
+  Netflix: "netflix",
+  prime: "prime",
+  Prime: "prime",
+  "prime video": "prime",
+  hulu: "hulu",
+  Hulu: "hulu",
+  max: "max",
+  Max: "max",
+  "hbo max": "max",
+  "HBO Max": "max",
+  apple: "apple",
+  Apple: "apple",
+  "apple tv+": "apple",
+  disney: "disney",
+  Disney: "disney",
+  "disney+": "disney"
+};
+
+export function normalizeProviderList(raw?: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw ?? []) {
+    const key = item.trim();
+    if (!key) continue;
+    const id = LEGACY_PROVIDER_IDS[key] ?? LEGACY_PROVIDER_IDS[key.toLowerCase()] ?? key.toLowerCase();
+    if (PROVIDER_OPTIONS.some((provider) => provider.id === id) && !seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
 export const LANGUAGE_OPTIONS = ["any", "en", "es", "fr", "ko", "ja"];
 export const EXCLUSION_OPTIONS = ["Horror", "Crime", "Romance", "Drama", "Action", "Thriller", "Comedy"];
 export const RELEASE_WINDOW_OPTIONS = ["any", "2020s", "2010s", "2000s", "pre-2000"] as const;

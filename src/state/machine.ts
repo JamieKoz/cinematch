@@ -1,4 +1,4 @@
-import { normalizeMoodList } from "../config/options";
+import { normalizeMoodList, normalizeProviderList } from "../config/options";
 import { prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { rankTitles } from "../engine/scoring";
 import type { OnboardingAnswers, SessionState, TasteProfile, Title } from "../types";
@@ -43,7 +43,7 @@ export function createInitialAnswers(seed: Partial<OnboardingAnswers> = {}): Onb
     releaseWindow: seed.releaseWindow ?? "any",
     customYearRange: seed.customYearRange ?? null,
     familiarities: normalizeFamiliarities(seed.familiarities ?? legacySeed.familiarity),
-    providers: seed.providers ?? [],
+    providers: normalizeProviderList(seed.providers),
     hardExclusions: seed.hardExclusions ?? [],
     keywords: normalizeStringArray(seed.keywords),
     usePersonalization: true
