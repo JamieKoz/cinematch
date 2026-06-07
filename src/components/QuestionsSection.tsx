@@ -1,51 +1,24 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { DeckBuildingOverlay } from "./DeckBuildingOverlay";
 import { AvoidTonightPicker } from "./AvoidTonightPicker";
-import { OnboardingSummary } from "./OnboardingSummary";
 import { DiscoveryAudiencePicker, DiscoveryPopularityPicker } from "./DiscoveryStylePicker";
 import { LanguageMultiSelect } from "./LanguageMultiSelect";
+import { OnboardingSummary } from "./OnboardingSummary";
 import { ReleaseTimeline } from "./ReleaseTimeline";
 import {
-  MOOD_CHIPS,
   PROVIDER_OPTIONS,
+  QUICK_PRESETS,
   RUNTIME_OPTIONS,
   TYPE_OPTIONS
 } from "../config/options";
 import { SettingsMenu } from "./SettingsMenu";
 import type { OnboardingAnswers, ViewerPrefs } from "../types";
 
-type OnboardingStep =
-  | "welcome"
-  | "mood"
-  | "type"
-  | "runtime"
-  | "release"
-  | "language"
-  | "discovery"
-  | "audience"
-  | "provider"
-  | "avoid"
-  | "keywords"
-  | "review"
-  | "watchMode";
+type OnboardingStep = "welcome" | "vibe" | "basics" | "review";
 
 type TransitionDirection = "forward" | "back";
 
-const STEP_ORDER: OnboardingStep[] = [
-  "welcome",
-  "mood",
-  "type",
-  "runtime",
-  "release",
-  "language",
-  "discovery",
-  "audience",
-  "provider",
-  "avoid",
-  "keywords",
-  "review",
-  "watchMode"
-];
+const STEP_ORDER: OnboardingStep[] = ["welcome", "vibe", "basics", "review"];
 
 function stepIndex(step: OnboardingStep) {
   return STEP_ORDER.indexOf(step);
@@ -76,21 +49,8 @@ function StepFrame({
   footer?: ReactNode;
   children: ReactNode;
 }) {
-  const totalQuestionSteps = STEP_ORDER.length - 1;
-  const currentQuestionStep = stepIndex(step);
-  const progressPercent = Math.min(100, Math.max(0, (currentQuestionStep / totalQuestionSteps) * 100));
-
   return (
     <section key={step} className={`onboarding-step onboarding-step--${direction} onboarding-step--stacked`}>
-      <div className="onboarding-progress" role="status" aria-live="polite" aria-label={`Step ${currentQuestionStep} of ${totalQuestionSteps}`}>
-        <div className="onboarding-progress__meta">
-          <span>Step {currentQuestionStep}</span>
-          <span>of {totalQuestionSteps}</span>
-        </div>
-        <div className="onboarding-progress__track" aria-hidden="true">
-          <span className="onboarding-progress__fill" style={{ width: `${progressPercent}%` }} />
-        </div>
-      </div>
       <div className="mb-6 text-center sm:mb-8">
         <h2 className="text-xl font-semibold tracking-tight text-white sm:text-2xl md:text-3xl">{title}</h2>
         {subtitle ? <p className="mt-2 text-sm text-zinc-300 sm:text-base">{subtitle}</p> : null}
@@ -124,6 +84,15 @@ function NavButton({
   );
 }
 
+function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="onboarding-section-heading">
+      <h3>{title}</h3>
+      {subtitle ? <p>{subtitle}</p> : null}
+    </div>
+  );
+}
+
 export function QuestionsSection(props: {
   answers: OnboardingAnswers;
   isBuildingDeck: boolean;
@@ -137,7 +106,6 @@ export function QuestionsSection(props: {
   onUpdateCustomYearRange: (next: Partial<{ min: number; max: number }>) => void;
   onToggleProvider: (provider: string) => void;
   onToggleExclusion: (exclusion: string) => void;
-  onToggleMood: (mood: string) => void;
   viewerPrefs: ViewerPrefs;
   onWatchRegionChange: (watchRegion: string) => void;
   onClearCache: () => void;
@@ -157,7 +125,6 @@ export function QuestionsSection(props: {
     onUpdateCustomYearRange,
     onToggleProvider,
     onToggleExclusion,
-    onToggleMood,
     viewerPrefs,
     onWatchRegionChange,
     onClearCache,
@@ -169,11 +136,7 @@ export function QuestionsSection(props: {
   const [step, setStep] = useState<OnboardingStep>("welcome");
   const [direction, setDirection] = useState<TransitionDirection>("forward");
   const [keywordsDraft, setKeywordsDraft] = useState((answers.keywords ?? []).join(", "));
-  const [watchMode, setWatchMode] = useState<"solo" | "group" | null>(null);
-
-  useEffect(() => {
-    setKeywordsDraft((answers.keywords ?? []).join(", "));
-  }, [answers.keywords]);
+  const [watchMode, setWatchMode] = useState<"solo" | "group">("solo");
 
   function goTo(next: OnboardingStep) {
     setDirection(stepIndex(next) >= stepIndex(step) ? "forward" : "back");
@@ -184,7 +147,7 @@ export function QuestionsSection(props: {
     if (step === "welcome") {
       onBegin();
     }
-    if (step === "keywords") {
+    if (step === "basics") {
       commitKeywords(keywordsDraft);
     }
     const next = nextStep(step);
@@ -205,38 +168,36 @@ export function QuestionsSection(props: {
     setKeywordsDraft(normalizedKeywords.join(", "));
   }
 
-  const canAdvanceFromMood = (answers.moods?.length ?? 0) > 0;
-  const isLastStep = step === "watchMode";
-  const isWatchModeStep = step === "watchMode";
+  function applyQuickPreset(preset: (typeof QUICK_PRESETS)[number]) {
+    onUpdateAnswers({
+      moods: [],
+      preferredType: "either",
+      runtime: "any",
+      releaseWindow: "any",
+      customYearRange: null,
+      familiarities: [],
+      ...preset.values,
+      quickModeId: preset.id
+    });
+  }
 
-  async function handleWatchModeNext() {
+  async function handleStart() {
+    commitKeywords(keywordsDraft);
     if (watchMode === "solo") {
       onStartSolo();
       return;
     }
-    if (watchMode === "group") {
-      onStartGroup();
-    }
+    onStartGroup();
   }
 
-  const stepNav = (
+  const canAdvanceFromVibe = (answers.moods?.length ?? 0) > 0;
+
+  const vibeNav = (
     <div className="onboarding-nav flex items-center justify-center gap-3">
       <NavButton onClick={goBack}>Back</NavButton>
-      {isLastStep ? (
-        <NavButton
-          variant="primary"
-          onClick={() => {
-            void handleWatchModeNext();
-          }}
-          disabled={!watchMode || isBuildingDeck}
-        >
-          {isBuildingDeck ? "Loading…" : "Next"}
-        </NavButton>
-      ) : (
-        <NavButton variant="primary" onClick={goNext} disabled={step === "mood" && !canAdvanceFromMood}>
-          {step === "review" ? "Continue" : "Next"}
-        </NavButton>
-      )}
+      <NavButton variant="primary" onClick={goNext} disabled={!canAdvanceFromVibe}>
+        Continue
+      </NavButton>
     </div>
   );
 
@@ -264,24 +225,31 @@ export function QuestionsSection(props: {
             </div>
           ) : null}
 
-          {step === "mood" ? (
-            <StepFrame step="mood" direction={direction} title="What's the mood?" subtitle="Pick one or more." footer={stepNav}>
-              <div className="mx-auto grid max-w-2xl grid-cols-2 gap-3 sm:gap-4">
-                {MOOD_CHIPS.map((mood) => {
-                  const selected = answers.moods?.includes(mood.value);
+          {step === "vibe" ? (
+            <StepFrame
+              step="vibe"
+              direction={direction}
+              title="What kind of night is it?"
+              subtitle="Choose the setup that best matches tonight."
+              footer={vibeNav}
+            >
+              <div className="onboarding-quick-presets">
+                {QUICK_PRESETS.map((preset) => {
+                  const selected = answers.quickModeId === preset.id;
                   return (
                     <button
-                      key={mood.value}
+                      key={preset.id}
                       type="button"
                       className={
                         selected
-                          ? "onboarding-choice-card onboarding-choice-card--selected"
-                          : "onboarding-choice-card"
+                          ? "onboarding-choice-card onboarding-choice-card--compact onboarding-choice-card--selected"
+                          : "onboarding-choice-card onboarding-choice-card--compact"
                       }
-                      onClick={() => onToggleMood(mood.value)}
+                      onClick={() => applyQuickPreset(preset)}
+                      aria-pressed={selected}
                     >
-                      <span className="text-lg font-semibold text-white sm:text-xl">{mood.label}</span>
-                      <span className="mt-2 text-xs text-zinc-300 sm:text-sm">{mood.description}</span>
+                      <span className="text-base font-semibold text-white sm:text-lg">{preset.label}</span>
+                      <span className="mt-2 text-xs text-zinc-300 sm:text-sm">{preset.description}</span>
                     </button>
                   );
                 })}
@@ -289,187 +257,194 @@ export function QuestionsSection(props: {
             </StepFrame>
           ) : null}
 
-          {step === "type" ? (
-            <StepFrame step="type" direction={direction} title="Movie or series?" subtitle="What are you watching tonight?" footer={stepNav}>
-              <div className="mx-auto grid max-w-4xl gap-3 sm:grid-cols-3 sm:gap-4">
-                {TYPE_OPTIONS.map((typeOption) => {
-                  const selected = (answers.preferredType ?? "either") === typeOption.value;
-                  return (
-                    <button
-                      key={typeOption.value}
-                      type="button"
-                      className={
-                        selected
-                          ? "onboarding-choice-card onboarding-choice-card--selected onboarding-choice-card--tall"
-                          : "onboarding-choice-card onboarding-choice-card--tall"
-                      }
-                      onClick={() => onUpdateAnswers({ preferredType: typeOption.value })}
-                    >
-                      <span className="text-xl font-semibold text-white sm:text-2xl">{typeOption.label}</span>
-                      <span className="mt-2 text-sm text-zinc-300">{typeOption.description}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </StepFrame>
-          ) : null}
-
-          {step === "runtime" ? (
-            <StepFrame step="runtime" direction={direction} title="How long?" subtitle="Pick a runtime that fits tonight." footer={stepNav}>
-              <div className="mx-auto grid max-w-2xl grid-cols-2 gap-3 sm:gap-4">
-                {RUNTIME_OPTIONS.map((runtimeOption) => {
-                  const selected = (answers.runtime ?? "any") === runtimeOption.value;
-                  return (
-                    <button
-                      key={runtimeOption.value}
-                      type="button"
-                      className={
-                        selected
-                          ? "onboarding-choice-card onboarding-choice-card--selected"
-                          : "onboarding-choice-card"
-                      }
-                      onClick={() => onUpdateAnswers({ runtime: runtimeOption.value })}
-                    >
-                      <span className="text-lg font-semibold text-white sm:text-xl">{runtimeOption.label}</span>
-                      <span className="mt-2 text-xs text-zinc-300 sm:text-sm">{runtimeOption.description}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </StepFrame>
-          ) : null}
-
-          {step === "release" ? (
-            <StepFrame step="release" direction={direction} title="Release date" subtitle="When should it have come out?" footer={stepNav}>
-              <ReleaseTimeline
-                releaseWindow={answers.releaseWindow ?? "any"}
-                customYearRange={customYearRange}
-                customYearStartPct={customYearStartPct}
-                customYearEndPct={customYearEndPct}
-                onSelectWindow={(window) => onUpdateAnswers({ releaseWindow: window, customYearRange: null })}
-                onToggleCustomYearRange={onToggleCustomYearRange}
-                onUpdateCustomYearRange={onUpdateCustomYearRange}
-              />
-            </StepFrame>
-          ) : null}
-
-          {step === "language" ? (
+          {step === "basics" ? (
             <StepFrame
-              step="language"
+              step="basics"
               direction={direction}
-              title="Language"
-              subtitle="English is selected by default — add more from the list."
-              footer={stepNav}
+              title="Ready when you are"
+              subtitle="Confirm the basics. Add more filters only if you want them."
             >
-              <LanguageMultiSelect
-                selected={answers.languages ?? ["en"]}
-                onChange={(languages) => onUpdateAnswers({ languages })}
-              />
-            </StepFrame>
-          ) : null}
-
-          {step === "discovery" ? (
-            <StepFrame
-              step="discovery"
-              direction={direction}
-              title="Discovery style"
-              subtitle="Pick any that apply — or leave on Surprise me for a balanced mix."
-              footer={stepNav}
-            >
-              <DiscoveryPopularityPicker
-                familiarities={answers.familiarities}
-                onChange={(familiarities) => onUpdateAnswers({ familiarities })}
-              />
-            </StepFrame>
-          ) : null}
-
-          {step === "audience" ? (
-            <StepFrame
-              step="audience"
-              direction={direction}
-              title="Who's watching?"
-              subtitle="Set the tone for who you're choosing for tonight."
-              footer={stepNav}
-            >
-              <DiscoveryAudiencePicker
-                familiarities={answers.familiarities}
-                onChange={(familiarities) => onUpdateAnswers({ familiarities })}
-              />
-            </StepFrame>
-          ) : null}
-
-          {step === "provider" ? (
-            <StepFrame step="provider" direction={direction} title="Provider" subtitle="Where do you want to watch?" footer={stepNav}>
-              <div className="onboarding-provider-layout">
-                <button
-                  type="button"
-                  aria-label="No preference"
-                  className={
-                    !answers.providers?.length
-                      ? "onboarding-provider-card onboarding-provider-card--any onboarding-provider-card--selected"
-                      : "onboarding-provider-card onboarding-provider-card--any"
-                  }
-                  onClick={() => onUpdateAnswers({ providers: [] })}
-                >
-                  <span className="onboarding-provider-card__any-label">No preference</span>
-                </button>
-                <div className="onboarding-provider-grid">
-                  {PROVIDER_OPTIONS.map((provider) => {
-                    const selected = answers.providers?.includes(provider.id);
+              <div className="onboarding-basics">
+                <SectionHeading title="Format" />
+                <div className="onboarding-segment-grid onboarding-segment-grid--three">
+                  {TYPE_OPTIONS.map((typeOption) => {
+                    const selected = (answers.preferredType ?? "either") === typeOption.value;
                     return (
                       <button
-                        key={provider.id}
+                        key={typeOption.value}
                         type="button"
-                        aria-label={provider.label}
-                        className={
-                          selected
-                            ? "onboarding-provider-card onboarding-provider-card--wide onboarding-provider-card--selected"
-                            : "onboarding-provider-card onboarding-provider-card--wide"
-                        }
-                        onClick={() => onToggleProvider(provider.id)}
+                        className={selected ? "onboarding-segment onboarding-segment--selected" : "onboarding-segment"}
+                        onClick={() => onUpdateAnswers({ preferredType: typeOption.value, quickModeId: undefined })}
+                        aria-pressed={selected}
                       >
-                        <img src={provider.logoSrc} alt="" className="onboarding-provider-card__logo" />
+                        <span>{typeOption.label}</span>
+                        <small>{typeOption.description}</small>
                       </button>
                     );
                   })}
                 </div>
-              </div>
-            </StepFrame>
-          ) : null}
 
-          {step === "avoid" ? (
-            <StepFrame
-              step="avoid"
-              direction={direction}
-              title="Avoid tonight"
-              subtitle="Tap genres you don't want in the deck tonight."
-              footer={stepNav}
-            >
-              <AvoidTonightPicker
-                selected={answers.hardExclusions ?? []}
-                onToggle={onToggleExclusion}
-              />
-            </StepFrame>
-          ) : null}
+                <SectionHeading title="Length" />
+                <div className="onboarding-segment-grid onboarding-segment-grid--four">
+                  {RUNTIME_OPTIONS.map((runtimeOption) => {
+                    const selected = (answers.runtime ?? "any") === runtimeOption.value;
+                    return (
+                      <button
+                        key={runtimeOption.value}
+                        type="button"
+                        className={selected ? "onboarding-segment onboarding-segment--selected" : "onboarding-segment"}
+                        onClick={() => onUpdateAnswers({ runtime: runtimeOption.value, quickModeId: undefined })}
+                        aria-pressed={selected}
+                      >
+                        <span>{runtimeOption.label}</span>
+                        <small>{runtimeOption.description}</small>
+                      </button>
+                    );
+                  })}
+                </div>
 
-          {step === "keywords" ? (
-            <StepFrame step="keywords" direction={direction} title="Keywords" subtitle="Optional — comma-separated vibes or themes." footer={stepNav}>
-              <div className="mx-auto w-full max-w-md">
-                <input
-                  className="w-full rounded-xl border border-white/25 bg-zinc-900/75 px-4 py-3 text-sm text-zinc-100 outline-none backdrop-blur-md placeholder:text-zinc-400"
-                  type="text"
-                  value={keywordsDraft}
-                  onChange={(event) => setKeywordsDraft(event.target.value)}
-                  onBlur={() => commitKeywords(keywordsDraft)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      commitKeywords(keywordsDraft);
-                      goNext();
-                    }
-                  }}
-                  placeholder="Black and white, Slasher, Feel-good"
-                />
+                <SectionHeading title="Watching" />
+                <div className="onboarding-segment-grid onboarding-segment-grid--two">
+                  <button
+                    type="button"
+                    className={watchMode === "solo" ? "onboarding-segment onboarding-segment--selected" : "onboarding-segment"}
+                    onClick={() => setWatchMode("solo")}
+                    aria-pressed={watchMode === "solo"}
+                  >
+                    <span>Solo</span>
+                    <small>Your personal deck</small>
+                  </button>
+                  <button
+                    type="button"
+                    className={watchMode === "group" ? "onboarding-segment onboarding-segment--selected" : "onboarding-segment"}
+                    onClick={() => setWatchMode("group")}
+                    aria-pressed={watchMode === "group"}
+                  >
+                    <span>Group</span>
+                    <small>Create a shareable room</small>
+                  </button>
+                </div>
+
+                <details className="onboarding-filter-panel">
+                  <summary className="summary-no-marker onboarding-filter-panel__summary">
+                    <span>
+                      <strong>Additional filters</strong>
+                      <small>Provider, language, release date, audience, avoids, and keywords</small>
+                    </span>
+                    <span aria-hidden="true">+</span>
+                  </summary>
+
+                  <div className="onboarding-filter-panel__content">
+                    <div className="onboarding-filter-block">
+                      <SectionHeading title="Provider" subtitle="No preference is fine." />
+                      <div className="onboarding-provider-layout">
+                        <button
+                          type="button"
+                          aria-label="No preference"
+                          className={
+                            !answers.providers?.length
+                              ? "onboarding-provider-card onboarding-provider-card--any onboarding-provider-card--selected"
+                              : "onboarding-provider-card onboarding-provider-card--any"
+                          }
+                          onClick={() => onUpdateAnswers({ providers: [] })}
+                        >
+                          <span className="onboarding-provider-card__any-label">No preference</span>
+                        </button>
+                        <div className="onboarding-provider-grid">
+                          {PROVIDER_OPTIONS.map((provider) => {
+                            const selected = answers.providers?.includes(provider.id);
+                            return (
+                              <button
+                                key={provider.id}
+                                type="button"
+                                aria-label={provider.label}
+                                className={
+                                  selected
+                                    ? "onboarding-provider-card onboarding-provider-card--wide onboarding-provider-card--selected"
+                                    : "onboarding-provider-card onboarding-provider-card--wide"
+                                }
+                                onClick={() => onToggleProvider(provider.id)}
+                              >
+                                <img src={provider.logoSrc} alt="" className="onboarding-provider-card__logo" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="onboarding-filter-block">
+                      <SectionHeading title="Release date" subtitle="Leave on Any era for the broadest deck." />
+                      <ReleaseTimeline
+                        releaseWindow={answers.releaseWindow ?? "any"}
+                        customYearRange={customYearRange}
+                        customYearStartPct={customYearStartPct}
+                        customYearEndPct={customYearEndPct}
+                        onSelectWindow={(window) =>
+                          onUpdateAnswers({ releaseWindow: window, customYearRange: null, quickModeId: undefined })
+                        }
+                        onToggleCustomYearRange={onToggleCustomYearRange}
+                        onUpdateCustomYearRange={onUpdateCustomYearRange}
+                      />
+                    </div>
+
+                    <div className="onboarding-filter-grid">
+                      <div className="onboarding-filter-block">
+                        <SectionHeading title="Language" subtitle="English is selected by default." />
+                        <LanguageMultiSelect
+                          selected={answers.languages ?? ["en"]}
+                          onChange={(languages) => onUpdateAnswers({ languages })}
+                        />
+                      </div>
+
+                      <div className="onboarding-filter-block">
+                        <SectionHeading title="Discovery style" />
+                        <DiscoveryPopularityPicker
+                          familiarities={answers.familiarities}
+                          onChange={(familiarities) => onUpdateAnswers({ familiarities, quickModeId: undefined })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="onboarding-filter-block">
+                      <SectionHeading title="Who's watching?" />
+                      <DiscoveryAudiencePicker
+                        familiarities={answers.familiarities}
+                        onChange={(familiarities) => onUpdateAnswers({ familiarities, quickModeId: undefined })}
+                      />
+                    </div>
+
+                    <div className="onboarding-filter-block">
+                      <SectionHeading title="Avoid tonight" subtitle="Tap genres you do not want in the deck." />
+                      <AvoidTonightPicker selected={answers.hardExclusions ?? []} onToggle={onToggleExclusion} />
+                    </div>
+
+                    <div className="onboarding-filter-block">
+                      <SectionHeading title="Keywords" subtitle="Optional comma-separated vibes or themes." />
+                      <input
+                        className="onboarding-keywords-input"
+                        type="text"
+                        value={keywordsDraft}
+                        onChange={(event) => setKeywordsDraft(event.target.value)}
+                        onBlur={() => commitKeywords(keywordsDraft)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            commitKeywords(keywordsDraft);
+                          }
+                        }}
+                        placeholder="Black and white, Slasher, Feel-good"
+                      />
+                    </div>
+                  </div>
+                </details>
+
+                <div className="onboarding-nav flex items-center justify-center gap-3">
+                  <NavButton onClick={goBack}>Back</NavButton>
+                  <NavButton variant="primary" onClick={goNext}>
+                    Review
+                  </NavButton>
+                </div>
               </div>
             </StepFrame>
           ) : null}
@@ -480,52 +455,20 @@ export function QuestionsSection(props: {
               direction={direction}
               title="Your picks"
               subtitle="Everything looks good? We'll build your deck from this."
-              footer={stepNav}
             >
               <OnboardingSummary answers={answers} watchRegion={viewerPrefs.watchRegion} />
-            </StepFrame>
-          ) : null}
-
-          {step === "watchMode" ? (
-            <StepFrame
-              step="watchMode"
-              direction={direction}
-              title="Watching solo or with someone?"
-              subtitle="Choose solo for the current flow, or group to create a shareable room."
-            >
-              <div className="mx-auto grid w-full max-w-3xl gap-3 sm:grid-cols-2 sm:gap-4">
-                <button
-                  type="button"
-                  className={
-                    watchMode === "solo"
-                      ? "onboarding-choice-card onboarding-choice-card--tall onboarding-choice-card--selected"
-                      : "onboarding-choice-card onboarding-choice-card--tall"
-                  }
-                  onClick={() => setWatchMode("solo")}
-                  aria-pressed={watchMode === "solo"}
+              <div className="onboarding-nav flex items-center justify-center gap-3">
+                <NavButton onClick={goBack}>Back</NavButton>
+                <NavButton
+                  variant="primary"
+                  onClick={() => {
+                    void handleStart();
+                  }}
+                  disabled={isBuildingDeck}
                 >
-                  <span className="text-xl font-semibold text-white sm:text-2xl">Solo</span>
-                  <span className="mt-2 text-sm text-zinc-300">
-                    Build your personal deck and pick tonight&apos;s winner as usual.
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={
-                    watchMode === "group"
-                      ? "onboarding-choice-card onboarding-choice-card--tall onboarding-choice-card--selected"
-                      : "onboarding-choice-card onboarding-choice-card--tall"
-                  }
-                  onClick={() => setWatchMode("group")}
-                  aria-pressed={watchMode === "group"}
-                >
-                  <span className="text-xl font-semibold text-white sm:text-2xl">Group</span>
-                  <span className="mt-2 text-sm text-zinc-300">
-                    Create a room and share a link so you both swipe the same deck.
-                  </span>
-                </button>
+                  {isBuildingDeck ? "Loading…" : watchMode === "group" ? "Create room" : "Start swiping"}
+                </NavButton>
               </div>
-              <div className="mt-6">{isWatchModeStep ? stepNav : null}</div>
             </StepFrame>
           ) : null}
         </div>

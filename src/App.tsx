@@ -52,7 +52,6 @@ export function App() {
     beginOnboarding,
     toggleProvider,
     toggleExclusion,
-    toggleMood,
     toggleCustomYearRange,
     updateCustomYearRange
   } = useQuickSetup();
@@ -226,7 +225,6 @@ export function App() {
             onUpdateCustomYearRange={updateCustomYearRange}
             onToggleProvider={toggleProvider}
             onToggleExclusion={toggleExclusion}
-            onToggleMood={toggleMood}
             viewerPrefs={viewerPrefs}
             onWatchRegionChange={handleWatchRegionChange}
             onClearCache={handleResetPersonalization}
