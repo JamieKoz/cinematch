@@ -19,7 +19,8 @@ npm run deploy
 
 ## Production
 
-Production deploys to `sententia.tv` are manual only:
+Production deploys to `sententia.tv` are manual only and publish a separate
+Worker named `sententia-production`:
 
 ```bash
 npm run deploy:production
@@ -31,4 +32,4 @@ Preview the production deploy without publishing:
 npm run deploy:production:dry-run
 ```
 
-Keep `sententia.tv` out of the default `wrangler.toml` routes/domains so push-triggered deploys do not publish to production.
+Keep `sententia.tv` out of the default `wrangler.toml` routes/domains so push-triggered deploys do not publish to production. The staging deploy uses `--keep-vars` so dashboard-managed environment variables are not removed by Wrangler.
