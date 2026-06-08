@@ -33,7 +33,7 @@ export function AppHeader({
         />
       </div>
       <div>
-        <p className="text-sm text-zinc-300 md:text-base">Stop scrolling. Swipe. Pick. Watch.</p>
+        <p className="text-sm text-zinc-300 md:text-base">Stop scrolling. Start Watching.</p>
       </div>
     </header>
   );

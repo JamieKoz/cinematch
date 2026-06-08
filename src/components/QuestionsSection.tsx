@@ -260,7 +260,7 @@ export function QuestionsSection(props: {
           {step === "welcome" ? (
             <div key="welcome" className="onboarding-step onboarding-step--forward onboarding-welcome">
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl md:text-6xl">Sententia</h1>
-              <p className="mt-4 max-w-md text-base text-zinc-300 sm:text-lg">Stop scrolling. Swipe. Pick. Watch.</p>
+              <p className="mt-4 max-w-md text-base text-zinc-300 sm:text-lg">Stop scrolling. Start Watching.</p>
               <div className="mt-8">
                 <NavButton variant="primary" onClick={goNext}>
                   Begin
