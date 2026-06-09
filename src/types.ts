@@ -41,6 +41,10 @@ export interface Title {
   providers: string[];
   popularity: number;
   releaseYear: number;
+  /** Optional IMDB id from TMDB external_ids (e.g. tt1234567). */
+  imdbId?: string;
+  /** Optional Amazon Prime Video deep-link identifier (e.g. amzn1.dv.gti....). */
+  primeVideoGti?: string;
   posterPath?: string | null;
   overview: string;
   rating?: number;

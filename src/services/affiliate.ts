@@ -20,6 +20,13 @@ export interface WatchLinkTitle {
   name: string;
   releaseYear: number;
   providers: string[];
+  /**
+   * Optional source identifier. If it contains Amazon Prime Video "gti" (e.g. amzn1.dv.gti.*),
+   * we can deep-link directly to the Prime Video detail page.
+   */
+  id?: string;
+  /** Optional Amazon Prime Video deep-link identifier (e.g. amzn1.dv.gti.*). */
+  primeVideoGti?: string;
 }
 
 export function amazonTagForRegion(watchRegion: string): string {
@@ -40,6 +47,18 @@ export function buildWatchUrl(title: WatchLinkTitle, watchRegion: string): strin
 
   if (watchDestination(title, watchRegion) === "amazon") {
     const tag = encodeURIComponent(amazonTagForRegion(region.code));
+
+    const gti =
+      title.primeVideoGti?.trim() ||
+      title.id?.match(/amzn1\.dv\.gti\.[A-Za-z0-9_-]+/)?.[0] ||
+      null;
+
+    // Best-effort: if we already have the Prime Video identifier, go straight to the title page.
+    if (gti) {
+      return `https://${region.amazonHost}/gp/video/detail/${encodeURIComponent(gti)}?tag=${tag}`;
+    }
+
+    // Fallback: search-based affiliate link (current behavior).
     return `https://${region.amazonHost}/s?k=${query}&i=instant-video&tag=${tag}`;
   }
 

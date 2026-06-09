@@ -109,6 +109,8 @@ export async function enrichTitlesWithTmdb(titles: Title[], watchRegion: string)
         cast,
         rating,
         runtimeMinutes,
+        imdbId: details?.imdbId,
+        primeVideoGti: details?.primeVideoGti,
         providers: resolveTitleProviders(
           regionalProviders,
           title.providers,
@@ -236,6 +238,7 @@ async function resolveSuggestionToTitle(
         providers: resolveTitleProviders(regionalProviders, answers.providers, true),
         popularity: typeof match.vote_average === "number" ? Math.min(1, match.vote_average / 10) : 0.55,
         releaseYear: year ?? new Date().getFullYear(),
+        imdbId: details?.imdbId,
         posterPath: details?.posterPath ?? match.poster_path ?? null,
         overview: details?.overview?.trim() || match.overview?.trim() || suggestion.reason?.trim() || "",
         rating: details?.voteAverage ?? match.vote_average,
@@ -303,6 +306,10 @@ interface TmdbDetailResponse {
   credits?: { cast?: Array<{ name?: string }> };
 }
 
+interface TmdbExternalIdsResponse {
+  imdb_id?: string;
+}
+
 interface TmdbDetailSummary {
   overview?: string;
   posterPath?: string | null;
@@ -311,6 +318,8 @@ interface TmdbDetailSummary {
   voteAverage?: number;
   runtimeMinutes?: number;
   providers?: string[];
+  imdbId?: string;
+  primeVideoGti?: string;
 }
 
 interface TmdbWatchProvidersAppend {
@@ -319,6 +328,7 @@ interface TmdbWatchProvidersAppend {
 
 interface TmdbDetailResponseWithProviders extends TmdbDetailResponse {
   "watch/providers"?: TmdbWatchProvidersAppend;
+  external_ids?: TmdbExternalIdsResponse;
 }
 
 async function fetchTmdbDetails(
@@ -332,7 +342,9 @@ async function fetchTmdbDetails(
   if (cached) return cached;
 
   const task = (async () => {
-    const append = watchRegion ? "credits,watch/providers" : "credits";
+    const append = watchRegion
+      ? "credits,watch/providers,external_ids"
+      : "credits,external_ids";
     const response = await fetch(`${API_BASE}/${mediaType}/${id}?append_to_response=${append}`, {
       headers: {
         accept: "application/json"
@@ -370,7 +382,11 @@ async function fetchTmdbDetails(
       cast: cast.length ? cast : undefined,
       voteAverage: data.vote_average,
       runtimeMinutes,
-      providers
+      providers,
+      imdbId: data.external_ids?.imdb_id,
+      primeVideoGti: data.external_ids?.imdb_id
+        ? `amzn1.dv.gti.${data.external_ids?.imdb_id}`
+        : undefined
     };
   })();
 

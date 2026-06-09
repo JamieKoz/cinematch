@@ -5,6 +5,24 @@ describe("buildWatchUrl", () => {
     vi.resetModules();
   });
 
+  it("deep-links to Prime Video detail when primeVideoGti is present", async () => {
+    vi.stubEnv("VITE_AMAZON_ASSOCIATE_TAG", "sententia-20");
+    vi.stubEnv("VITE_AMAZON_TAG_AU", "");
+    const { buildWatchUrl } = await import("./affiliate");
+
+    const title = {
+      id: "whatever",
+      name: "Interstellar",
+      releaseYear: 2014,
+      providers: ["prime"],
+      primeVideoGti: "amzn1.dv.gti.ABC123-DEF456"
+    };
+
+    expect(buildWatchUrl(title, "US")).toBe(
+      "https://www.amazon.com/gp/video/detail/amzn1.dv.gti.ABC123-DEF456?tag=sententia-20"
+    );
+  });
+
   it("uses US Amazon when title is on Prime and US tag is configured", async () => {
     vi.stubEnv("VITE_AMAZON_ASSOCIATE_TAG", "sententia-20");
     vi.stubEnv("VITE_AMAZON_TAG_AU", "");

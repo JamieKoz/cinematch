@@ -21,6 +21,16 @@ type TransitionDirection = "forward" | "back";
 const STEP_ORDER: OnboardingStep[] = ["welcome", "vibe", "basics", "review"];
 const QUESTION_STEPS = STEP_ORDER.filter((step): step is Exclude<OnboardingStep, "welcome"> => step !== "welcome");
 const NO_PREFERENCE_PRESET_ID = "no-preference";
+const STEP_DISPLAY_LABELS: Record<Exclude<OnboardingStep, "welcome">, string> = {
+  vibe: "Preset",
+  basics: "Vibes",
+  review: "Review"
+};
+const NEXT_STEP_LABELS: Record<Exclude<OnboardingStep, "welcome">, string> = {
+  vibe: "Vibes",
+  basics: "Review",
+  review: "Finish"
+};
 
 function stepIndex(step: OnboardingStep) {
   return STEP_ORDER.indexOf(step);
@@ -55,13 +65,15 @@ function StepFrame({
   const progressValue = progressIndex >= 0 ? progressIndex + 1 : 1;
   const progressTotal = QUESTION_STEPS.length;
   const progressPct = Math.round((progressValue / progressTotal) * 100);
+  const stepDisplayLabel = STEP_DISPLAY_LABELS[step];
+  const nextStepLabel = NEXT_STEP_LABELS[step];
 
   return (
     <section key={step} className={`onboarding-step onboarding-step--${direction} onboarding-step--stacked`}>
       <div className="onboarding-progress" aria-label={`Step ${progressValue} of ${progressTotal}`}>
         <div className="onboarding-progress__meta">
-          <span>{`Step ${progressValue}`}</span>
-          <span>{`${progressTotal} total`}</span>
+          <span>{`${stepDisplayLabel}`}</span>
+          <span>{`${nextStepLabel}`}</span>
         </div>
         <div className="onboarding-progress__track" role="progressbar" aria-valuemin={1} aria-valuemax={progressTotal} aria-valuenow={progressValue}>
           <span className="onboarding-progress__fill" style={{ width: `${progressPct}%` }} />
@@ -274,7 +286,7 @@ export function QuestionsSection(props: {
               step="vibe"
               direction={direction}
               title="What kind of night is it?"
-              subtitle="Pick a vibe preset, or keep it open and tune basics next."
+              subtitle="Choose a preset for your vibe."
               footer={vibeNav}
             >
               <div className="onboarding-quick-presets">
@@ -345,12 +357,6 @@ export function QuestionsSection(props: {
                     <small>Create a shareable room</small>
                   </button>
                 </div>
-
-                {selectedQuickPreset ? (
-                  <p className="mt-4 rounded-xl border border-violet-300/25 bg-violet-500/10 px-4 py-2 text-left text-sm text-violet-100">
-                    Using <strong>{selectedQuickPreset.label}</strong>. Adjust format, length, or filters to customize it.
-                  </p>
-                ) : null}
 
                 <SectionHeading title="Format" />
                 <div className="onboarding-segment-grid onboarding-segment-grid--three">
