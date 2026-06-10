@@ -16,8 +16,11 @@ const VIEWER_PREFS_KEY = "sententia.viewerPrefs.v1";
 const SAVED_PICKS_KEY = "sententia.savedPicks.v1";
 const WATCHED_TITLES_KEY = "sententia.watchedTitles.v1";
 const GROUP_HISTORY_KEY = "sententia.groupHistory.v1";
+const SOLO_HISTORY_KEY = "sententia.soloHistory.v1";
+const SESSION_DRAFT_KEY = "sententia.sessionDraft.v1";
 const MAX_LIBRARY_ITEMS = 200;
 const MAX_GROUP_HISTORY = 60;
+const MAX_SOLO_HISTORY = 30;
 
 export interface SavedPickEntry {
   title: Title;
@@ -28,8 +31,16 @@ export interface SavedPickEntry {
 export interface WatchedTitleEntry {
   title: Title;
   watchedAt: string;
-  rating?: number;
+  reaction?: "up" | "down";
   source: "solo" | "group";
+}
+
+export interface SoloHistoryEntry {
+  id: string;
+  winner: Title;
+  reasons: string[];
+  recordedAt: string;
+  followUpDone?: boolean;
 }
 
 export interface GroupHistoryEntry {
@@ -40,6 +51,25 @@ export interface GroupHistoryEntry {
   sharedCompromise?: Title;
   overlapTitles: Title[];
 }
+
+export interface SessionDraft {
+  session: OnboardingSessionSnapshot;
+  catalog: Title[];
+  savedAt: string;
+}
+
+type OnboardingSessionSnapshot = {
+  phase: "swipe" | "showdown";
+  sessionId: string;
+  answers: OnboardingAnswers;
+  deck: string[];
+  deckCursor: number;
+  shortlist: string[];
+  passed: string[];
+  showdownQueue: string[];
+  winnerId?: string;
+  backupId?: string;
+};
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -113,11 +143,13 @@ export function saveProfile(profile: TasteProfile): void {
 }
 
 export function loadLastAnswers(): Partial<OnboardingAnswers> {
-  return safeJsonParse<Partial<OnboardingAnswers>>(safeGetItem(ANSWERS_KEY), {});
+  return sanitizeCachedAnswers(
+    safeJsonParse<Partial<OnboardingAnswers>>(safeGetItem(ANSWERS_KEY), {})
+  );
 }
 
 export function saveLastAnswers(answers: OnboardingAnswers): void {
-  safeSetItem(ANSWERS_KEY, JSON.stringify(answers));
+  safeSetItem(ANSWERS_KEY, JSON.stringify(sanitizeCachedAnswers(answers)));
 }
 
 export function loadViewerPrefsFromStorage(): ViewerPrefs {
@@ -173,8 +205,11 @@ export function toggleSavedPick(title: Title, source: "solo" | "group"): boolean
 }
 
 export function loadWatchedTitles(): WatchedTitleEntry[] {
-  const list = safeJsonParse<WatchedTitleEntry[]>(safeGetItem(WATCHED_TITLES_KEY), []);
-  return Array.isArray(list) ? list : [];
+  const list = safeJsonParse<unknown[]>(safeGetItem(WATCHED_TITLES_KEY), []);
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((entry) => normalizeWatchedEntry(entry))
+    .filter((entry): entry is WatchedTitleEntry => Boolean(entry));
 }
 
 export function isTitleWatched(titleId: string): boolean {
@@ -187,29 +222,28 @@ export function loadWatchedTitleIds(): string[] {
 
 export function markTitleWatched(
   title: Title,
-  options: { source: "solo" | "group"; rating?: number }
+  options: { source: "solo" | "group"; reaction?: "up" | "down" }
 ): WatchedTitleEntry {
   const watched = loadWatchedTitles();
   const next: WatchedTitleEntry = {
     title,
     source: options.source,
     watchedAt: new Date().toISOString(),
-    rating: options.rating
+    reaction: options.reaction
   };
   const deduped = [next, ...watched.filter((entry) => entry.title.id !== title.id)].slice(0, MAX_LIBRARY_ITEMS);
   safeSetItem(WATCHED_TITLES_KEY, JSON.stringify(deduped));
   return next;
 }
 
-export function updateWatchedRating(titleId: string, rating: number): WatchedTitleEntry | null {
+export function updateWatchedReaction(titleId: string, reaction?: "up" | "down"): WatchedTitleEntry | null {
   const watched = loadWatchedTitles();
   const index = watched.findIndex((entry) => entry.title.id === titleId);
   if (index < 0) return null;
-  const rounded = Math.max(1, Math.min(5, Math.round(rating)));
   const current = watched[index]!;
   const updated: WatchedTitleEntry = {
     ...current,
-    rating: rounded
+    reaction
   };
   watched.splice(index, 1);
   safeSetItem(WATCHED_TITLES_KEY, JSON.stringify([updated, ...watched]));
@@ -231,6 +265,35 @@ export function upsertGroupHistory(entry: GroupHistoryEntry): void {
   safeSetItem(GROUP_HISTORY_KEY, JSON.stringify(next));
 }
 
+export function loadSoloHistory(): SoloHistoryEntry[] {
+  const list = safeJsonParse<SoloHistoryEntry[]>(safeGetItem(SOLO_HISTORY_KEY), []);
+  return Array.isArray(list) ? list : [];
+}
+
+export function saveSoloResult(entry: SoloHistoryEntry): void {
+  if (!entry.winner) return;
+  const existing = loadSoloHistory();
+  const next = [entry, ...existing].slice(0, MAX_SOLO_HISTORY);
+  safeSetItem(SOLO_HISTORY_KEY, JSON.stringify(next));
+}
+
+export function markSoloHistoryFollowUpDone(entryId: string): void {
+  if (!entryId.trim()) return;
+  const existing = loadSoloHistory();
+  const index = existing.findIndex((entry) => entry.id === entryId);
+  if (index < 0) return;
+  const updated: SoloHistoryEntry = {
+    ...existing[index]!,
+    followUpDone: true
+  };
+  existing.splice(index, 1, updated);
+  safeSetItem(SOLO_HISTORY_KEY, JSON.stringify(existing));
+}
+
+export function clearSoloHistory(): void {
+  safeRemoveItem(SOLO_HISTORY_KEY);
+}
+
 export function resetPersonalization(): void {
   safeRemoveItem(PROFILE_KEY);
   safeRemoveItem(ANSWERS_KEY);
@@ -238,6 +301,23 @@ export function resetPersonalization(): void {
   safeRemoveItem(SAVED_PICKS_KEY);
   safeRemoveItem(WATCHED_TITLES_KEY);
   safeRemoveItem(GROUP_HISTORY_KEY);
+  safeRemoveItem(SOLO_HISTORY_KEY);
+  safeRemoveItem(SESSION_DRAFT_KEY);
+}
+
+export function loadSessionDraft(): SessionDraft | null {
+  const draft = safeJsonParse<SessionDraft | null>(safeGetItem(SESSION_DRAFT_KEY), null);
+  if (!draft || !Array.isArray(draft.catalog)) return null;
+  if (!draft.session || (draft.session.phase !== "swipe" && draft.session.phase !== "showdown")) return null;
+  return draft;
+}
+
+export function saveSessionDraft(draft: SessionDraft): void {
+  safeSetItem(SESSION_DRAFT_KEY, JSON.stringify(draft));
+}
+
+export function clearSessionDraft(): void {
+  safeRemoveItem(SESSION_DRAFT_KEY);
 }
 
 function migrateProfile(parsed: Partial<TasteProfile>): TasteProfile {
@@ -265,4 +345,50 @@ function migrateViewerPrefs(parsed: Partial<ViewerPrefs>): ViewerPrefs {
     source: parsed.source === "manual" ? "manual" : "auto",
     detectedAt: typeof parsed.detectedAt === "string" ? parsed.detectedAt : undefined
   };
+}
+
+function normalizeWatchedEntry(value: unknown): WatchedTitleEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as {
+    title?: Title;
+    watchedAt?: string;
+    source?: "solo" | "group";
+    reaction?: string;
+    rating?: number;
+  };
+  if (!candidate.title || typeof candidate.watchedAt !== "string") return null;
+  return {
+    title: candidate.title,
+    watchedAt: candidate.watchedAt,
+    source: candidate.source === "group" ? "group" : "solo",
+    reaction: normalizeReaction(candidate.reaction, candidate.rating)
+  };
+}
+
+function normalizeReaction(
+  reaction?: string,
+  legacyRating?: number
+): "up" | "down" | undefined {
+  if (reaction === "up" || reaction === "down") return reaction;
+  if (typeof legacyRating !== "number") return undefined;
+  if (legacyRating >= 4) return "up";
+  if (legacyRating <= 2) return "down";
+  return undefined;
+}
+
+/**
+ * We intentionally do not persist "Basics" step selections.
+ * Cache only vibe-level choices so returning users don't get sticky provider/filter defaults.
+ */
+function sanitizeCachedAnswers(answers: Partial<OnboardingAnswers>): Partial<OnboardingAnswers> {
+  const next: Partial<OnboardingAnswers> = {};
+
+  if (typeof answers.quickModeId === "string" && answers.quickModeId.trim()) {
+    next.quickModeId = answers.quickModeId;
+  }
+  if (Array.isArray(answers.moods)) {
+    next.moods = answers.moods.filter((mood): mood is string => typeof mood === "string" && mood.trim().length > 0);
+  }
+
+  return next;
 }

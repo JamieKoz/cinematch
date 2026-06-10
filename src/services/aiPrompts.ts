@@ -11,6 +11,7 @@ function compactHistory(h?: AiHistoryHints) {
     sessionCount: h.sessionCount,
     guidance: [
       "Prefer titles similar to likedSample; avoid anything resembling rejectedSample themes.",
+      "seenSample are previously seen titles. Prefer fresh options first, but rewatch picks are still acceptable if they strongly fit.",
       h.lastChosenLabel
         ? `User recently chose something like: ${h.lastChosenLabel}. Lean that direction when ties exist.`
         : undefined,
@@ -88,8 +89,12 @@ export function buildGeneratePrompt(req: AiGenerateRequest): string {
     constraints: [
       `Return exactly ${req.count} suggestions if possible.`,
       "Use real well-known titles that exist in TMDB (movies and TV series).",
+      "Use exact public TMDB titles, not abbreviations, invented titles, or loose franchise names.",
       "Do not include duplicates.",
       "Respect preferred type if user set one.",
+      req.answers.providers.length > 0
+        ? `Every suggestion must be plausibly streamable on these selected services in ${watchRegionLabel(req.watchRegion)}: ${req.answers.providers.join(", ")}.`
+        : "Prefer titles that are easy to stream in the user's region.",
       "Avoid genres or themes the user listed under hardExclusions.",
       `User watches in ${watchRegionLabel(req.watchRegion)} (${req.watchRegion}); favor titles they can plausibly access there.`
     ],

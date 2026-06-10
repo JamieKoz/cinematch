@@ -17,9 +17,9 @@ export function GroupResultSection(props: {
   compromiseMatched: boolean;
   whySharedPick?: string[];
   isTitleSaved: (titleId: string) => boolean;
-  isTitleWatched: (titleId: string) => boolean;
   onToggleSaveTitle: (title: Title) => void;
-  onMarkWatchedTitle: (title: Title) => void;
+  onReactTitle: (title: Title, reaction?: "up" | "down") => void;
+  titleRatings: Record<string, "up" | "down" | undefined>;
   onStartCompromiseShowdown: () => void;
   onWatchNow: (title: Title) => void;
   onWatchTrailer: (title: Title) => void;
@@ -36,9 +36,9 @@ export function GroupResultSection(props: {
     compromiseMatched,
     whySharedPick,
     isTitleSaved,
-    isTitleWatched,
     onToggleSaveTitle,
-    onMarkWatchedTitle,
+    onReactTitle,
+    titleRatings,
     onStartCompromiseShowdown,
     onWatchNow,
     onWatchTrailer,
@@ -106,35 +106,34 @@ export function GroupResultSection(props: {
           ) : null}
           <div className="mt-3 grid gap-2">
             <button
-              className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110"
+              className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110 active:scale-95 active:brightness-95"
               onClick={() => onWatchNow(sharedCompromise)}
             >
               Watch now
             </button>
             <button
-              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
               onClick={() => onWatchTrailer(sharedCompromise)}
             >
               Watch trailer
             </button>
             <button
-              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
               onClick={() => onShowMore(sharedCompromise)}
             >
               Show more
             </button>
             <button
-              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
               onClick={() => onToggleSaveTitle(sharedCompromise)}
             >
               {isTitleSaved(sharedCompromise.id) ? "Saved in watchlist" : "Save for later"}
             </button>
-            <button
-              className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
-              onClick={() => onMarkWatchedTitle(sharedCompromise)}
-            >
-              {isTitleWatched(sharedCompromise.id) ? "Watched" : "Mark watched"}
-            </button>
+            <SeenReactionButton
+              title={sharedCompromise}
+              existingReaction={titleRatings[sharedCompromise.id]}
+              onReact={onReactTitle}
+            />
           </div>
           {(myCompromisePick || partnerCompromisePick) && !compromiseMatched ? (
             <p className="mt-3 text-xs text-zinc-300">
@@ -153,7 +152,7 @@ export function GroupResultSection(props: {
           </div>
           {canRunCompromise ? (
             <button
-              className="mt-3 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110"
+              className="mt-3 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110 active:scale-95 active:brightness-95"
               onClick={() => {
                 setShowCompromiseInviteModal(false);
                 setDismissedCompromiseInvite(false);
@@ -180,7 +179,7 @@ export function GroupResultSection(props: {
       {(hasOverlap || sharedCompromise) ? (
         <div className="mt-5">
           <p className="text-xs uppercase tracking-wide text-zinc-400">What each of you leaned toward</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-3">
             {personalPicks.map((entry) => (
               <article key={entry.label} className="rounded-xl border border-white/15 bg-zinc-900/45 p-3">
                 <p className="text-xs uppercase tracking-wide text-zinc-400">{entry.label}</p>
@@ -204,17 +203,22 @@ export function GroupResultSection(props: {
                         {entry.title.name} ({entry.title.releaseYear})
                       </p>
                       <button
-                        className="mt-2 rounded-full border border-white/25 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+                        className="mt-2 rounded-full border border-white/25 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
                         onClick={() => onShowMore(entry.title!)}
                       >
                         Show more
                       </button>
                       <button
-                        className="mt-2 rounded-full border border-white/25 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+                        className="mt-2 rounded-full border border-white/25 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
                         onClick={() => onWatchTrailer(entry.title!)}
                       >
                         Watch trailer
                       </button>
+                      <SeenReactionButton
+                        title={entry.title}
+                        existingReaction={titleRatings[entry.title.id]}
+                        onReact={onReactTitle}
+                      />
                     </div>
                   </div>
                 ) : (
@@ -250,29 +254,34 @@ export function GroupResultSection(props: {
                   </p>
                   <div className="mt-3 grid gap-2">
                     <button
-                      className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110"
+                      className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110 active:scale-95 active:brightness-95"
                       onClick={() => onWatchNow(entry.title!)}
                     >
                       Watch now
                     </button>
                     <button
-                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
                       onClick={() => onWatchTrailer(entry.title!)}
                     >
                       Watch trailer
                     </button>
                     <button
-                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
                       onClick={() => onShowMore(entry.title!)}
                     >
                       Show more
                     </button>
                     <button
-                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
                       onClick={() => onToggleSaveTitle(entry.title!)}
                     >
                       {isTitleSaved(entry.title!.id) ? "Saved in watchlist" : "Save for later"}
                     </button>
+                    <SeenReactionButton
+                      title={entry.title}
+                      existingReaction={titleRatings[entry.title.id]}
+                      onReact={onReactTitle}
+                    />
                   </div>
                 </>
               ) : (
@@ -284,7 +293,7 @@ export function GroupResultSection(props: {
       )}
 
       <button
-        className="mt-5 rounded-full border border-white/30 bg-zinc-900/60 px-4 py-2 text-sm transition hover:border-white/50 hover:bg-zinc-800/75"
+        className="mt-5 rounded-full border border-white/30 bg-zinc-900/60 px-4 py-2 text-sm transition hover:border-white/50 hover:bg-zinc-800/75 active:scale-95"
         onClick={onStartAnotherRound}
       >
         Start another round
@@ -299,7 +308,7 @@ export function GroupResultSection(props: {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
-                className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110"
+                className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110 active:scale-95 active:brightness-95"
                 onClick={() => {
                   setShowCompromiseInviteModal(false);
                   setDismissedCompromiseInvite(false);
@@ -309,7 +318,7 @@ export function GroupResultSection(props: {
                 Join now
               </button>
               <button
-                className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
+                className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
                 onClick={() => {
                   setShowCompromiseInviteModal(false);
                   setDismissedCompromiseInvite(true);
@@ -322,6 +331,65 @@ export function GroupResultSection(props: {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function SeenReactionButton({
+  title,
+  existingReaction,
+  onReact
+}: {
+  title: Title;
+  existingReaction?: "up" | "down";
+  onReact: (title: Title, reaction?: "up" | "down") => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (existingReaction && !open) {
+    return (
+      <button
+        className="rounded-full border border-violet-300/40 bg-violet-800/30 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-violet-800/45 active:scale-95"
+        onClick={() => setOpen(true)}
+      >
+        Reacted {existingReaction === "up" ? "👍" : "👎"}
+      </button>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
+        onClick={() => setOpen(true)}
+      >
+        Rate it
+      </button>
+    );
+  }
+
+  return (
+    <div className="seen-overlay-pop flex items-center gap-2 rounded-full border border-white/15 bg-zinc-900/60 px-3 py-1.5">
+      <button
+        className="grid h-7 w-7 place-items-center rounded-full border border-emerald-300/55 bg-emerald-900/40 text-sm text-emerald-100 transition hover:bg-emerald-800/60 active:scale-90"
+        onClick={() => {
+          onReact(title, existingReaction === "up" ? undefined : "up");
+          setOpen(false);
+        }}
+        aria-label="Liked this film"
+      >
+        👍
+      </button>
+      <button
+        className="grid h-7 w-7 place-items-center rounded-full border border-rose-300/55 bg-rose-900/40 text-sm text-rose-100 transition hover:bg-rose-800/60 active:scale-90"
+        onClick={() => {
+          onReact(title, existingReaction === "down" ? undefined : "down");
+          setOpen(false);
+        }}
+        aria-label="Did not like this film"
+      >
+        👎
+      </button>
+    </div>
   );
 }
 

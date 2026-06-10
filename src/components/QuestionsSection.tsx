@@ -12,7 +12,7 @@ import {
   TYPE_OPTIONS
 } from "../config/options";
 import { SettingsMenu } from "./SettingsMenu";
-import type { OnboardingAnswers, ViewerPrefs } from "../types";
+import type { OnboardingAnswers, Title, ViewerPrefs } from "../types";
 
 type OnboardingStep = "welcome" | "vibe" | "basics" | "review";
 
@@ -22,12 +22,12 @@ const STEP_ORDER: OnboardingStep[] = ["welcome", "vibe", "basics", "review"];
 const QUESTION_STEPS = STEP_ORDER.filter((step): step is Exclude<OnboardingStep, "welcome"> => step !== "welcome");
 const NO_PREFERENCE_PRESET_ID = "no-preference";
 const STEP_DISPLAY_LABELS: Record<Exclude<OnboardingStep, "welcome">, string> = {
-  vibe: "Preset",
-  basics: "Vibes",
+  vibe: "Vibe",
+  basics: "Basics",
   review: "Review"
 };
 const NEXT_STEP_LABELS: Record<Exclude<OnboardingStep, "welcome">, string> = {
-  vibe: "Vibes",
+  vibe: "Basics",
   basics: "Review",
   review: "Finish"
 };
@@ -102,8 +102,8 @@ function NavButton({
 }) {
   const base =
     variant === "primary"
-      ? "rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-2.5 font-medium text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 disabled:opacity-50"
-      : "rounded-full border border-white/25 bg-zinc-900/60 px-5 py-2.5 text-sm text-zinc-100 transition hover:border-white/45 hover:bg-zinc-800/70 disabled:opacity-50";
+      ? "rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-2.5 font-medium text-white shadow-lg shadow-violet-900/40 transition hover:brightness-110 active:scale-95 active:brightness-95 disabled:opacity-50"
+      : "rounded-full border border-white/25 bg-zinc-900/60 px-5 py-2.5 text-sm text-zinc-100 transition hover:border-white/45 hover:bg-zinc-800/70 active:scale-95 disabled:opacity-50";
 
   return (
     <button type="button" className={base} onClick={onClick} disabled={disabled}>
@@ -129,6 +129,9 @@ export function QuestionsSection(props: {
   customYearStartPct: number;
   customYearEndPct: number;
   onBegin: () => void;
+  hasLastAnswers?: boolean;
+  hasDraftSession?: boolean;
+  followUpTitle?: Title;
   onUpdateAnswers: (next: Partial<OnboardingAnswers>) => void;
   onToggleCustomYearRange: () => void;
   onUpdateCustomYearRange: (next: Partial<{ min: number; max: number }>) => void;
@@ -139,10 +142,14 @@ export function QuestionsSection(props: {
   onClearCache: () => void;
   onToggleTasteProfile: () => void;
   onToggleLibrary: () => void;
+  onToggleHistory?: () => void;
   savedCount: number;
   watchedCount: number;
   onStartSolo: () => void;
   onStartGroup: () => void;
+  onStartFromLastTime?: () => void;
+  onResumeSession?: () => void;
+  onFollowUpResponse?: (reaction?: "up" | "down") => void;
 }) {
   const {
     answers,
@@ -152,6 +159,9 @@ export function QuestionsSection(props: {
     customYearStartPct,
     customYearEndPct,
     onBegin,
+    hasLastAnswers,
+    hasDraftSession,
+    followUpTitle,
     onUpdateAnswers,
     onToggleCustomYearRange,
     onUpdateCustomYearRange,
@@ -162,10 +172,14 @@ export function QuestionsSection(props: {
     onClearCache,
     onToggleTasteProfile,
     onToggleLibrary,
+    onToggleHistory,
     savedCount,
     watchedCount,
     onStartSolo,
-    onStartGroup
+    onStartGroup,
+    onStartFromLastTime,
+    onResumeSession,
+    onFollowUpResponse
   } = props;
 
   const customYearRange = answers.customYearRange;
@@ -263,6 +277,7 @@ export function QuestionsSection(props: {
             onClearCache={onClearCache}
             onToggleTasteProfile={onToggleTasteProfile}
             onToggleLibrary={onToggleLibrary}
+            onToggleHistory={onToggleHistory}
             savedCount={savedCount}
             watchedCount={watchedCount}
           />
@@ -272,8 +287,48 @@ export function QuestionsSection(props: {
           {step === "welcome" ? (
             <div key="welcome" className="onboarding-step onboarding-step--forward onboarding-welcome">
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl md:text-6xl">Sententia</h1>
+              <p className="mt-2 text-[10px] italic leading-tight text-zinc-500 opacity-80">
+                Latin for an opinion, a vote, or a judicial decision
+              </p>
               <p className="mt-4 max-w-md text-base text-zinc-300 sm:text-lg">Stop scrolling. Start Watching.</p>
-              <div className="mt-8">
+              {followUpTitle ? (
+                <div className="follow-up-slide-in mt-6 max-w-md rounded-2xl border border-violet-300/35 bg-violet-900/20 px-4 py-3 text-left">
+                  <p className="text-xs uppercase tracking-wide text-violet-200">Quick follow-up</p>
+                  <p className="mt-1 text-sm text-zinc-100">
+                    Last time we picked <span className="font-medium">{followUpTitle.name}</span>. Did you watch it?
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-emerald-300/55 bg-emerald-900/40 px-3 py-1 text-xs text-emerald-100 transition hover:bg-emerald-800/60 active:scale-95"
+                      onClick={() => onFollowUpResponse?.("up")}
+                    >
+                      👍 Yes, liked it
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-rose-300/55 bg-rose-900/40 px-3 py-1 text-xs text-rose-100 transition hover:bg-rose-800/60 active:scale-95"
+                      onClick={() => onFollowUpResponse?.("down")}
+                    >
+                      👎 Yes, not for me
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1 text-xs text-zinc-100 transition hover:bg-zinc-800/70 active:scale-95"
+                      onClick={() => onFollowUpResponse?.(undefined)}
+                    >
+                      Didn&apos;t watch it
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                {hasLastAnswers && onStartFromLastTime ? (
+                  <NavButton onClick={onStartFromLastTime}>Randomize</NavButton>
+                ) : null}
+                {hasDraftSession && onResumeSession ? (
+                  <NavButton onClick={onResumeSession}>Resume where you left off</NavButton>
+                ) : null}
                 <NavButton variant="primary" onClick={goNext}>
                   Begin
                 </NavButton>

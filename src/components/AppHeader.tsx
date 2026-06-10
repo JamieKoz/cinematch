@@ -7,6 +7,7 @@ export function AppHeader({
   onClearCache,
   onToggleTasteProfile,
   onToggleLibrary,
+  onToggleHistory,
   savedCount,
   watchedCount
 }: {
@@ -15,6 +16,7 @@ export function AppHeader({
   onClearCache: () => void;
   onToggleTasteProfile?: () => void;
   onToggleLibrary?: () => void;
+  onToggleHistory?: () => void;
   savedCount?: number;
   watchedCount?: number;
 }) {
@@ -28,6 +30,7 @@ export function AppHeader({
           onClearCache={onClearCache}
           onToggleTasteProfile={onToggleTasteProfile}
           onToggleLibrary={onToggleLibrary}
+          onToggleHistory={onToggleHistory}
           savedCount={savedCount}
           watchedCount={watchedCount}
         />

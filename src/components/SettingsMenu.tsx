@@ -8,6 +8,7 @@ export function SettingsMenu({
   onClearCache,
   onToggleTasteProfile,
   onToggleLibrary,
+  onToggleHistory,
   savedCount,
   watchedCount
 }: {
@@ -16,12 +17,26 @@ export function SettingsMenu({
   onClearCache: () => void;
   onToggleTasteProfile?: () => void;
   onToggleLibrary?: () => void;
+  onToggleHistory?: () => void;
   savedCount?: number;
   watchedCount?: number;
 }) {
+  function handleResetAllData() {
+    if (typeof window === "undefined") {
+      onClearCache();
+      return;
+    }
+    const confirmed = window.confirm(
+      "Reset all data? This clears your taste profile, saved picks, seen history, and room history."
+    );
+    if (confirmed) {
+      onClearCache();
+    }
+  }
+
   return (
     <details className="group relative ml-auto">
-      <summary className="summary-no-marker list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70">
+      <summary className="summary-no-marker list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70 active:scale-90">
         <span className="sr-only">Settings</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -58,14 +73,14 @@ export function SettingsMenu({
           ))}
         </select>
         <p className="mt-1.5 text-[11px] text-zinc-500">{formatViewerRegionHint(viewerPrefs)}</p>
-        {onToggleTasteProfile || onToggleLibrary ? (
+        {onToggleTasteProfile || onToggleLibrary || onToggleHistory ? (
           <div className="mt-3 border-t border-white/10 pt-3">
             <p className="text-[11px] uppercase tracking-wide text-zinc-400">Personalization</p>
             <div className="mt-2 grid gap-2">
               {onToggleTasteProfile ? (
                 <button
                   type="button"
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80"
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80 active:bg-zinc-800/90"
                   onClick={onToggleTasteProfile}
                 >
                   Taste profile
@@ -74,10 +89,19 @@ export function SettingsMenu({
               {onToggleLibrary ? (
                 <button
                   type="button"
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80"
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80 active:bg-zinc-800/90"
                   onClick={onToggleLibrary}
                 >
-                  Library ({savedCount ?? 0}/{watchedCount ?? 0})
+                  Library ({savedCount ?? 0} saved / {watchedCount ?? 0} seen)
+                </button>
+              ) : null}
+              {onToggleHistory ? (
+                <button
+                  type="button"
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80 active:bg-zinc-800/90"
+                  onClick={onToggleHistory}
+                >
+                  History
                 </button>
               ) : null}
             </div>
@@ -85,10 +109,10 @@ export function SettingsMenu({
         ) : null}
         <button
           type="button"
-          className="mt-3 w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-100 transition hover:bg-zinc-800/80"
-          onClick={onClearCache}
+          className="mt-3 w-full rounded-lg px-3 py-2 text-left text-sm text-rose-300/80 transition hover:bg-rose-950/40 hover:text-rose-200 active:bg-rose-950/60"
+          onClick={handleResetAllData}
         >
-          Clear cache
+          Reset all data
         </button>
       </div>
     </details>

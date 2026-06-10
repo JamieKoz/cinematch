@@ -8,6 +8,7 @@ import { fetchWatchProvidersForTmdbId, parseTmdbCatalogId } from "./tmdbWatchPro
 
 export function tmdbPosterUrl(posterPath: string | null | undefined, size: "w342" | "w500" = "w500"): string | null {
   if (!posterPath) return null;
+  if (/^https?:\/\//i.test(posterPath)) return posterPath;
   return `https://image.tmdb.org/t/p/${size}${posterPath}`;
 }
 
@@ -110,7 +111,7 @@ export async function enrichTitlesWithTmdb(titles: Title[], watchRegion: string)
         rating,
         runtimeMinutes,
         imdbId: details?.imdbId,
-        primeVideoGti: details?.primeVideoGti,
+        youtubeTrailerId: details?.youtubeTrailerId,
         providers: resolveTitleProviders(
           regionalProviders,
           title.providers,
@@ -168,7 +169,6 @@ export async function resolveAiSuggestionsToTitles(
   if (suggestions.length === 0) return [];
   const genreLookup = await getGenreLookup();
   const rejectedIds = new Set(profile.rejectedIds);
-  const seenIds = new Set(profile.seenIds);
 
   const candidates = await mapWithConcurrency(
     suggestions,
@@ -178,8 +178,7 @@ export async function resolveAiSuggestionsToTitles(
         answers,
         watchRegion,
         genreLookup,
-        rejectedIds,
-        seenIds
+        rejectedIds
       })
   );
 
@@ -204,10 +203,9 @@ async function resolveSuggestionToTitle(
     watchRegion: string;
     genreLookup: Map<number, string>;
     rejectedIds: Set<string>;
-    seenIds: Set<string>;
   }
 ): Promise<Title | null> {
-  const { answers, watchRegion, genreLookup, rejectedIds, seenIds } = context;
+  const { answers, watchRegion, genreLookup, rejectedIds } = context;
   const results = await searchTmdbTitle(suggestion.name);
   const match = strictSearchMatch(results, suggestion.name, suggestion.type);
   let picked: Title | null = null;
@@ -215,7 +213,7 @@ async function resolveSuggestionToTitle(
   if (match && (match.media_type === "movie" || match.media_type === "tv")) {
     const media = match.media_type;
     const id = `tmdb-${media}-${match.id}`;
-    if (!rejectedIds.has(id) && !seenIds.has(id)) {
+    if (!rejectedIds.has(id)) {
       const details = await fetchTmdbDetails(media, match.id, watchRegion);
       const year = parseYear(match.release_date ?? match.first_air_date);
       const regionalProviders =
@@ -239,6 +237,7 @@ async function resolveSuggestionToTitle(
         popularity: typeof match.vote_average === "number" ? Math.min(1, match.vote_average / 10) : 0.55,
         releaseYear: year ?? new Date().getFullYear(),
         imdbId: details?.imdbId,
+        youtubeTrailerId: details?.youtubeTrailerId,
         posterPath: details?.posterPath ?? match.poster_path ?? null,
         overview: details?.overview?.trim() || match.overview?.trim() || suggestion.reason?.trim() || "",
         rating: details?.voteAverage ?? match.vote_average,
@@ -251,10 +250,42 @@ async function resolveSuggestionToTitle(
     const synthetic = createSyntheticAiTitle(suggestion, answers, index);
     if (passesAiDeckConstraints(synthetic, answers)) {
       const posterHint = findBestMatch(results, synthetic);
+      const expectedMediaType: "movie" | "tv" = synthetic.type === "series" ? "tv" : "movie";
+      const matchedHint: (TmdbSearchResult & { media_type: "movie" | "tv" }) | null =
+        posterHint?.media_type === expectedMediaType
+          ? { ...posterHint, media_type: expectedMediaType }
+          : null;
+      const details = matchedHint
+        ? await fetchTmdbDetails(matchedHint.media_type, matchedHint.id, watchRegion)
+        : null;
+      const regionalProviders =
+        matchedHint
+          ? details?.providers ?? (await fetchWatchProvidersForTmdbId(matchedHint.media_type, matchedHint.id, watchRegion))
+          : [];
+      const genresFromSearch = matchedHint
+        ? (matchedHint.genre_ids ?? [])
+          .map((gid) => genreLookup.get(gid))
+          .filter((name): name is string => Boolean(name))
+        : [];
+      const genres = details?.genres?.length ? details.genres : genresFromSearch;
+      const displayName = matchedHint
+        ? (matchedHint.title ?? matchedHint.name ?? synthetic.name).trim() || synthetic.name
+        : synthetic.name;
+
       picked = {
         ...synthetic,
+        id: matchedHint ? `tmdb-${matchedHint.media_type}-${matchedHint.id}` : synthetic.id,
+        name: displayName,
+        runtimeMinutes: details?.runtimeMinutes ?? synthetic.runtimeMinutes,
+        genres: genres.length ? genres : synthetic.genres,
+        providers: resolveTitleProviders(regionalProviders, synthetic.providers, Boolean(matchedHint)),
+        imdbId: details?.imdbId,
+        youtubeTrailerId: details?.youtubeTrailerId,
         posterPath: posterHint?.poster_path ?? synthetic.posterPath ?? null,
-        releaseYear: parseYear(posterHint?.release_date ?? posterHint?.first_air_date) ?? synthetic.releaseYear
+        releaseYear: parseYear(posterHint?.release_date ?? posterHint?.first_air_date) ?? synthetic.releaseYear,
+        overview: details?.overview?.trim() || posterHint?.overview?.trim() || synthetic.overview,
+        rating: details?.voteAverage ?? posterHint?.vote_average,
+        cast: details?.cast
       };
     }
   } else if (!picked.posterPath) {
@@ -310,6 +341,17 @@ interface TmdbExternalIdsResponse {
   imdb_id?: string;
 }
 
+interface TmdbVideoEntry {
+  key?: string;
+  site?: string;
+  type?: string;
+  official?: boolean;
+}
+
+interface TmdbVideosResponse {
+  results?: TmdbVideoEntry[];
+}
+
 interface TmdbDetailSummary {
   overview?: string;
   posterPath?: string | null;
@@ -319,7 +361,7 @@ interface TmdbDetailSummary {
   runtimeMinutes?: number;
   providers?: string[];
   imdbId?: string;
-  primeVideoGti?: string;
+  youtubeTrailerId?: string;
 }
 
 interface TmdbWatchProvidersAppend {
@@ -329,6 +371,7 @@ interface TmdbWatchProvidersAppend {
 interface TmdbDetailResponseWithProviders extends TmdbDetailResponse {
   "watch/providers"?: TmdbWatchProvidersAppend;
   external_ids?: TmdbExternalIdsResponse;
+  videos?: TmdbVideosResponse;
 }
 
 async function fetchTmdbDetails(
@@ -343,8 +386,8 @@ async function fetchTmdbDetails(
 
   const task = (async () => {
     const append = watchRegion
-      ? "credits,watch/providers,external_ids"
-      : "credits,external_ids";
+      ? "credits,watch/providers,external_ids,videos"
+      : "credits,external_ids,videos";
     const response = await fetch(`${API_BASE}/${mediaType}/${id}?append_to_response=${append}`, {
       headers: {
         accept: "application/json"
@@ -384,9 +427,7 @@ async function fetchTmdbDetails(
       runtimeMinutes,
       providers,
       imdbId: data.external_ids?.imdb_id,
-      primeVideoGti: data.external_ids?.imdb_id
-        ? `amzn1.dv.gti.${data.external_ids?.imdb_id}`
-        : undefined
+      youtubeTrailerId: pickYoutubeTrailerId(data.videos?.results ?? [])
     };
   })();
 
@@ -446,6 +487,14 @@ async function mapWithConcurrency<T, R>(
 
   await Promise.all(Array.from({ length: size }, () => worker()));
   return out;
+}
+
+function pickYoutubeTrailerId(videos: TmdbVideoEntry[]): string | undefined {
+  const yt = videos.filter((v) => v.site === "YouTube" && v.key);
+  const officialTrailer = yt.find((v) => v.official && v.type === "Trailer");
+  const anyTrailer = yt.find((v) => v.type === "Trailer");
+  const teaser = yt.find((v) => v.official && v.type === "Teaser");
+  return (officialTrailer ?? anyTrailer ?? teaser ?? yt[0])?.key ?? undefined;
 }
 
 function setWithLimit<K, V>(map: Map<K, V>, key: K, value: V, maxEntries: number): void {

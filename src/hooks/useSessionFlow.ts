@@ -3,7 +3,7 @@ import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultPro
 import { saveLastAnswers } from "../services/storage";
 import { trackEvent } from "../services/analytics";
 import { apiGateUserMessage } from "../services/apiErrors";
-import type { SessionState, TasteProfile } from "../types";
+import type { OnboardingAnswers, SessionState, TasteProfile } from "../types";
 import { cloneProfile, cloneSession, mergeCatalog } from "../utils/appState";
 import { sessionReducer } from "../state/sessionReducer";
 import { buildRecommendationDeck } from "../services/deckBuilder";
@@ -20,19 +20,20 @@ export function useSessionFlow(params: {
   const [deckBuildError, setDeckBuildError] = useState<string | null>(null);
   const [lastSwipeSnapshot, setLastSwipeSnapshot] = useState<{ session: SessionState; profile: TasteProfile } | null>(null);
 
-  async function startSwipeRound() {
+  async function startSwipeRound(overrideAnswers?: OnboardingAnswers) {
+    const activeAnswers = overrideAnswers ?? session.answers;
     setIsBuildingDeck(true);
     setDeckBuildError(null);
     setLastSwipeSnapshot(null);
-    saveLastAnswers({ ...session.answers, quickModeId: undefined });
+    saveLastAnswers({ ...activeAnswers, quickModeId: undefined });
     trackEvent("deck_build_start", {
       watch_region: watchRegion
     });
 
     try {
-      const activeProfile = session.answers.usePersonalization ? profile : createDefaultProfile();
+      const activeProfile = activeAnswers.usePersonalization ? profile : createDefaultProfile();
       const { deckTitles, deck } = await buildRecommendationDeck({
-        answers: session.answers,
+        answers: activeAnswers,
         profile: activeProfile,
         catalog,
         watchRegion
@@ -42,7 +43,10 @@ export function useSessionFlow(params: {
         setCatalog((prev) => mergeCatalog(prev, deckTitles));
       }
 
-      setSession((prev) => sessionReducer(prev, { type: "DECK_READY", deck }));
+      setSession((prev) => {
+        const withAnswers = sessionReducer(prev, { type: "UPDATE_ANSWERS", next: activeAnswers });
+        return sessionReducer(withAnswers, { type: "DECK_READY", deck });
+      });
     } catch (error) {
       const gateMessage = apiGateUserMessage(error);
       setDeckBuildError(

@@ -1,5 +1,5 @@
 import { phaseAfterDeckExhausted, resultFromSingleKeep, retryAnswersAfterEmptyKeep } from "./swipeAdvance";
-import { createSession } from "./machine";
+import { createInitialAnswers, createSession } from "./machine";
 import type { OnboardingAnswers, SessionState } from "../types";
 
 const SHORTLIST_TARGET = 5;
@@ -117,10 +117,10 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
   }
 
   if (action.type === "RESET_ROUND") {
-    const nextAnswers: OnboardingAnswers = {
-      ...state.answers,
+    const nextAnswers: OnboardingAnswers = createInitialAnswers({
+      moods: state.answers.moods,
       quickModeId: undefined
-    };
+    });
     return {
       ...createSession(nextAnswers),
       answers: nextAnswers

@@ -18,7 +18,7 @@ export function ShowdownDetailsModal({
             {title.name} ({title.releaseYear})
           </h3>
           <button
-            className="rounded-full border border-white/25 bg-zinc-800/70 px-2 py-1 text-sm transition hover:bg-zinc-700/80"
+            className="rounded-full border border-white/25 bg-zinc-800/70 px-2 py-1 text-sm transition hover:bg-zinc-700/80 active:scale-95"
             onClick={onClose}
           >
             Close
@@ -29,7 +29,7 @@ export function ShowdownDetailsModal({
           {typeof title.rating === "number" ? ` - ${title.rating.toFixed(1)}★` : ""}
         </p>
         <p className="mt-3 text-sm text-zinc-100">{title.overview}</p>
-        <p className="mt-3 text-sm text-zinc-300">Genres: {title.genres.join(", ")}</p>
+        {title.genres.length ? <p className="mt-3 text-sm text-zinc-300">Genres: {title.genres.join(", ")}</p> : null}
         {title.cast?.length ? <p className="mt-1 text-sm text-zinc-300">Cast: {title.cast.join(", ")}</p> : null}
       </div>
     </div>

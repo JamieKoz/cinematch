@@ -56,10 +56,9 @@ export function applyDecisionSignal(profile: TasteProfile, winner: Title): Taste
   return next;
 }
 
-export function applyWatchedSignal(profile: TasteProfile, title: Title, rating: number): TasteProfile {
+export function applyWatchedSignal(profile: TasteProfile, title: Title, reaction?: "up" | "down"): TasteProfile {
   const next = cloneProfile(profile);
-  const normalized = Math.max(1, Math.min(5, Math.round(rating)));
-  const delta = normalized - 3;
+  const delta = reaction === "up" ? 2 : reaction === "down" ? -2 : 0;
   if (delta !== 0) {
     adjustTitleSignals(next, title, delta);
   }

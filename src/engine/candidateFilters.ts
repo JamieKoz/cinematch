@@ -44,25 +44,13 @@ export function isRejectedTitle(title: Title, profile: TasteProfile): boolean {
   return profile.rejectedIds.includes(title.id);
 }
 
-export function isSeenTitle(title: Title, profile: TasteProfile): boolean {
-  return profile.seenIds.includes(title.id);
-}
-
-const DEFAULT_MIN_POOL = 12;
-
 export function prepareSwipeCandidatePool(
   catalog: Title[],
   answers: OnboardingAnswers,
-  profile: TasteProfile,
-  minViable = DEFAULT_MIN_POOL
+  profile: TasteProfile
 ): Title[] {
   const rejectedIds = new Set(profile.rejectedIds);
-  const seenIds = new Set(profile.seenIds);
   const constrained = catalog.filter((title) => passesCandidateConstraints(title, answers));
   const withoutRejected = constrained.filter((title) => !rejectedIds.has(title.id));
-  const base = withoutRejected.length > 0 ? withoutRejected : constrained;
-
-  const withoutSeen = base.filter((title) => !seenIds.has(title.id));
-  if (withoutSeen.length >= minViable) return withoutSeen;
-  return base;
+  return withoutRejected.length > 0 ? withoutRejected : constrained;
 }

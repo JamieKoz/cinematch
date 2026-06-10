@@ -20,6 +20,7 @@ export interface WatchLinkTitle {
   name: string;
   releaseYear: number;
   providers: string[];
+  type?: "movie" | "series";
   /**
    * Optional source identifier. If it contains Amazon Prime Video "gti" (e.g. amzn1.dv.gti.*),
    * we can deep-link directly to the Prime Video detail page.
@@ -27,6 +28,8 @@ export interface WatchLinkTitle {
   id?: string;
   /** Optional Amazon Prime Video deep-link identifier (e.g. amzn1.dv.gti.*). */
   primeVideoGti?: string;
+  /** Optional YouTube video ID for the official trailer (from TMDB /videos). */
+  youtubeTrailerId?: string;
 }
 
 export function amazonTagForRegion(watchRegion: string): string {
@@ -34,8 +37,8 @@ export function amazonTagForRegion(watchRegion: string): string {
   return AMAZON_TAG_BY_REGION[code] ?? "";
 }
 
-export function watchDestination(title: WatchLinkTitle, watchRegion: string): WatchDestination {
-  if (title.providers.includes("prime") && amazonTagForRegion(watchRegion).length > 0) {
+export function watchDestination(title: WatchLinkTitle, _watchRegion: string): WatchDestination {
+  if (title.providers.includes("prime")) {
     return "amazon";
   }
   return "justwatch";
@@ -47,22 +50,52 @@ export function buildWatchUrl(title: WatchLinkTitle, watchRegion: string): strin
 
   if (watchDestination(title, watchRegion) === "amazon") {
     const tag = encodeURIComponent(amazonTagForRegion(region.code));
+    const gti = getPrimeVideoGti(title);
 
-    const gti =
-      title.primeVideoGti?.trim() ||
-      title.id?.match(/amzn1\.dv\.gti\.[A-Za-z0-9_-]+/)?.[0] ||
-      null;
-
-    // Best-effort: if we already have the Prime Video identifier, go straight to the title page.
+    // Direct deep-link when we have a confirmed Prime Video identifier.
     if (gti) {
-      return `https://${region.amazonHost}/gp/video/detail/${encodeURIComponent(gti)}?tag=${tag}`;
+      const tagParams = tag ? `&linkCode=xm2&tag=${tag}` : "";
+      return `https://www.primevideo.com/detail?gti=${encodeURIComponent(gti)}${tagParams}`;
     }
 
-    // Fallback: search-based affiliate link (current behavior).
-    return `https://${region.amazonHost}/s?k=${query}&i=instant-video&tag=${tag}`;
+    // Without a GTI/ASIN (requires Amazon PA API to obtain), fall back to a
+    // JustWatch title page — a single "Watch on Prime" click from there goes
+    // directly to the Prime Video detail page, which is better than a raw
+    // Prime Video keyword search.
+    return buildJustWatchUrl(title, region.justwatchLocale, query);
   }
 
-  return `https://www.justwatch.com/${region.justwatchLocale}/search?q=${query}`;
+  return buildJustWatchUrl(title, region.justwatchLocale, query);
+}
+
+function getPrimeVideoGti(title: WatchLinkTitle): string | null {
+  return (
+    title.primeVideoGti?.trim() ||
+    title.id?.match(/amzn1\.dv\.gti\.[A-Za-z0-9_-]+/)?.[0] ||
+    null
+  );
+}
+
+function buildJustWatchUrl(title: WatchLinkTitle, locale: string, query: string): string {
+  if (title.type === "movie") {
+    return `https://www.justwatch.com/${locale}/movie/${slugifyJustWatchTitle(title.name)}`;
+  }
+  if (title.type === "series") {
+    return `https://www.justwatch.com/${locale}/tv-show/${slugifyJustWatchTitle(title.name)}`;
+  }
+  return `https://www.justwatch.com/${locale}/search?q=${query}`;
+}
+
+function slugifyJustWatchTitle(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 export function trackWatchClick(
@@ -88,15 +121,22 @@ export function openWatchUrl(title: WatchLinkTitle, watchRegion: string): void {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-export function buildTrailerUrl(title: Pick<WatchLinkTitle, "name" | "releaseYear">): string {
+export function buildTrailerDeepLink(title: Pick<WatchLinkTitle, "name" | "releaseYear" | "youtubeTrailerId">): string {
+  // Direct link to the specific trailer video when TMDB has resolved the YouTube ID.
+  if (title.youtubeTrailerId) {
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(title.youtubeTrailerId)}`;
+  }
+  // Fall back to a YouTube search for the official trailer.
   const query = encodeURIComponent(`${title.name} ${title.releaseYear} official trailer`);
   return `https://www.youtube.com/results?search_query=${query}`;
 }
 
-export function openTrailerUrl(title: Pick<WatchLinkTitle, "name" | "releaseYear">): void {
+export function openTrailerUrl(title: Pick<WatchLinkTitle, "name" | "releaseYear" | "youtubeTrailerId">): void {
   trackEvent("watch_trailer_click", {
     title: title.name,
-    year: title.releaseYear
+    year: title.releaseYear,
+    has_video_id: Boolean(title.youtubeTrailerId)
   });
-  window.open(buildTrailerUrl(title), "_blank", "noopener,noreferrer");
+  const url = buildTrailerDeepLink(title);
+  window.open(url, "_blank", "noopener,noreferrer");
 }

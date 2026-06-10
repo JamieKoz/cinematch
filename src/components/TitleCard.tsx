@@ -64,9 +64,11 @@ export function TitleCard({
         <p className={compactMobile ? "mt-1 text-sm text-zinc-100" : "mt-2 text-zinc-100"} style={overviewStyle}>
           {title.overview}
         </p>
-        <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>
-          Genres: {title.genres.join(", ")}
-        </p>
+        {title.genres.length ? (
+          <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-2 text-sm text-zinc-300"}>
+            Genres: {title.genres.join(", ")}
+          </p>
+        ) : null}
         {title.providers.length ? (
           <p className={compactMobile ? "mt-1 text-xs sm:text-sm text-zinc-300" : "mt-1 text-sm text-zinc-300"}>
             Streaming: {formatProviderLabels(title.providers)}

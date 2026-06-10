@@ -45,6 +45,8 @@ export interface Title {
   imdbId?: string;
   /** Optional Amazon Prime Video deep-link identifier (e.g. amzn1.dv.gti....). */
   primeVideoGti?: string;
+  /** Optional YouTube video ID for the official trailer (from TMDB /videos). */
+  youtubeTrailerId?: string;
   posterPath?: string | null;
   overview: string;
   rating?: number;

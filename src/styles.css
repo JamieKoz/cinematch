@@ -210,6 +210,106 @@ body {
   }
 }
 
+/* ── Micro-interaction keyframes ── */
+
+@keyframes profile-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes seen-overlay-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(-4px);
+  }
+  60% {
+    transform: scale(1.03) translateY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes follow-up-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes result-section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes poster-tile-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Micro-interaction utility classes ── */
+
+.profile-panel-enter {
+  animation: profile-panel-enter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.seen-overlay-pop {
+  animation: seen-overlay-pop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.follow-up-slide-in {
+  animation: follow-up-slide-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.15s;
+}
+
+.result-section-enter {
+  animation: result-section-enter 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.poster-tile-enter {
+  animation: poster-tile-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger delays for poster grid */
+.poster-tile-enter-d1 { animation-delay: 0.04s; }
+.poster-tile-enter-d2 { animation-delay: 0.08s; }
+.poster-tile-enter-d3 { animation-delay: 0.12s; }
+.poster-tile-enter-d4 { animation-delay: 0.16s; }
+.poster-tile-enter-d5 { animation-delay: 0.20s; }
+.poster-tile-enter-d6 { animation-delay: 0.24s; }
+
+/* Hover lift for poster tiles */
+.poster-tile-hover {
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
+}
+.poster-tile-hover:hover {
+  transform: translateY(-3px) scale(1.015);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
 @keyframes showdown-picked {
   0%,
   100% {
@@ -264,17 +364,17 @@ body {
 }
 
 .utility-page-panel {
-  animation: utility-panel-slide 220ms ease-out;
+  animation: utility-panel-slide 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes utility-panel-slide {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px) scale(0.99);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1419,6 +1519,51 @@ body {
   animation: deck-spin-soft 0.85s linear infinite;
 }
 
+/* ── Deck building: scrolling poster strip ── */
+
+.deck-building-thumbnail-strip {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  opacity: 0.78;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 8%,
+    black 92%,
+    transparent 100%
+  );
+}
+
+.deck-building-thumbnail-strip .thumbnail-row {
+  width: 100%;
+  opacity: 0.55;
+}
+
+@keyframes deck-status-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.deck-status-line {
+  animation: deck-status-fade 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .swipe-deck-enter {
   animation: swipe-deck-enter 0.58s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -1457,6 +1602,11 @@ body {
   .deck-building-spinner {
     animation: none;
     opacity: 0.85;
+  }
+
+  .deck-status-line {
+    animation: none;
+    opacity: 1;
   }
 
   .swipe-deck-enter,
@@ -1513,6 +1663,29 @@ body {
 
   .showdown-choice__poster::before {
     display: none;
+  }
+
+  .utility-page-shell,
+  .utility-page-panel,
+  .profile-panel-enter,
+  .seen-overlay-pop,
+  .follow-up-slide-in,
+  .result-section-enter,
+  .poster-tile-enter,
+  .poster-tile-enter-d1,
+  .poster-tile-enter-d2,
+  .poster-tile-enter-d3,
+  .poster-tile-enter-d4,
+  .poster-tile-enter-d5,
+  .poster-tile-enter-d6 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .poster-tile-hover:hover {
+    transform: none;
+    box-shadow: none;
   }
 
   .onboarding-reveal,

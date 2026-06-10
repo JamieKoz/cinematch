@@ -51,10 +51,19 @@ export function SwipeSection(props: {
 
   return (
     <section>
-      <div className="swipe-deck-enter">
-        <p className="mt-2 text-sm text-zinc-300">
-          Card {deckCursor + 1} / {deckLength} - Shortlist: {shortlistLength}
-        </p>
+      <div className="relative flex items-center justify-center swipe-deck-enter">
+        <div className="mt-2 ml-2 flex items-center gap-3">
+          <span
+            key={deckCursor}
+            className="inline-block animate-pulse text-3xl font-bold tracking-tight text-zinc-100 transition-all duration-300"
+          >
+            {deckLength - deckCursor}
+          </span>
+          <span className="text-sm text-zinc-400">remaining</span>
+        </div>
+        <span className="absolute right-0 mt-2 text-xs text-zinc-500">
+          {shortlistLength} shortlisted
+        </span>
       </div>
 
       <div className="relative mt-3">
@@ -106,6 +115,7 @@ export function SwipeSection(props: {
               >
                 LIKE
               </div>
+
               <div className="">
                 <TitleCard title={currentTitle} noTopMargin compactMobile truncateOverview />
               </div>
@@ -117,7 +127,7 @@ export function SwipeSection(props: {
       <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-2xl p-1 sm:mt-4 sm:gap-3 sm:p-2 swipe-deck-enter swipe-deck-enter-delay-3">
         <button
           aria-label="Undo"
-          className="justify-self-start grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition-colors hover:bg-zinc-800/60 disabled:cursor-not-allowed disabled:opacity-40"
+          className="justify-self-start grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition hover:bg-zinc-800/60 active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
           onClick={onUndo}
           disabled={!canUndo}
         >
@@ -126,14 +136,14 @@ export function SwipeSection(props: {
         <div className="flex items-center justify-center gap-4 sm:gap-10">
           <button
             aria-label="Pass"
-            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition-colors hover:bg-rose-800/55"
+            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition hover:bg-rose-800/55 active:scale-90"
             onClick={onPass}
           >
             ✕
           </button>
           <button
             aria-label="Keep"
-            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition-colors hover:bg-emerald-800/60"
+            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition hover:bg-emerald-800/60 active:scale-90"
             onClick={onKeep}
           >
             ♥
@@ -141,7 +151,7 @@ export function SwipeSection(props: {
         </div>
         <button
           aria-label="Share"
-          className="justify-self-end grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition-colors hover:bg-zinc-800/60"
+          className="justify-self-end grid h-11 w-11 sm:h-14 sm:w-14 place-items-center rounded-full border border-white/35 bg-zinc-900/45 text-lg sm:text-xl text-zinc-100 transition hover:bg-zinc-800/60 active:scale-90"
           onClick={onShare}
         >
           <svg

@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { THUMBNAIL_PATHS } from "../data/thumbnailManifest";
 
 const STATUS_LINES = [
-  "Curating picks for your mood…",
-  "Matching titles to your filters…",
-  "Pulling posters and details…",
-  "Shuffling the shortlist…",
-  "Almost ready to swipe…"
+  "Asking AI to think about your vibe…",
+  "Searching titles that match your mood…",
+  "Checking what's streaming in your region…",
+  "Pulling cast, ratings and posters…",
+  "Scoring titles against your taste…",
+  "Shuffling your personalised deck…",
+  "Finalising picks — almost ready…"
 ];
 
 export function DeckBuildingOverlay({
@@ -16,64 +19,76 @@ export function DeckBuildingOverlay({
   onDismiss?: () => void;
 }) {
   const [lineIndex, setLineIndex] = useState(0);
+  const stripImages = useMemo(() => {
+    const subset = THUMBNAIL_PATHS.slice(0, 18);
+    if (subset.length > 0) return subset;
+    return [];
+  }, []);
 
   useEffect(() => {
     if (error) return;
     const id = window.setInterval(() => {
       setLineIndex((i) => (i + 1) % STATUS_LINES.length);
-    }, 2400);
+    }, 2200);
     return () => window.clearInterval(id);
   }, [error]);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-black/55 px-6 backdrop-blur-md"
+      className="fixed inset-0 z-50 bg-black/62 backdrop-blur-md"
       role="status"
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="deck-building-card-stack relative h-44 w-36 sm:h-52 sm:w-44">
-        <div className="deck-building-card-wrap">
-          <div className="deck-building-card-inner rounded-2xl border border-white/15 bg-zinc-900/80 shadow-xl" />
-        </div>
-        <div className="deck-building-card-wrap">
-          <div className="deck-building-card-inner rounded-2xl border border-white/15 bg-zinc-800/70 shadow-xl" />
-        </div>
-        <div className="deck-building-card-wrap">
-          <div className="deck-building-card-inner relative overflow-hidden rounded-2xl border border-violet-400/30 bg-zinc-900/90 shadow-2xl shadow-violet-950/40">
-            <div className="deck-building-skeleton absolute inset-0 opacity-90" />
-            <div className="relative flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
-              <div className="deck-building-spinner h-9 w-9 rounded-full border-2 border-white/20 border-t-violet-400" />
-              <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-400">Deck</p>
+      {!error ? (
+        <>
+          <div className="deck-building-thumbnail-strip" aria-hidden="true">
+            <div className="thumbnail-row">
+              <div className="thumbnail-row-track" style={{ animationDuration: "65s" }}>
+                {[...stripImages, ...stripImages].map((src, index) => (
+                  <img
+                    key={`${src}-${index}`}
+                    src={src}
+                    alt=""
+                    className="thumbnail-row-poster"
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="max-w-sm text-center">
-        {error ? (
-          <>
+          <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
+            <div className="max-w-sm text-center">
+              <p className="text-base font-semibold text-zinc-100 sm:text-lg">Building your deck</p>
+              <p
+                key={lineIndex}
+                className="deck-status-line mt-2 min-h-[2.75rem] text-sm text-zinc-300"
+              >
+                {STATUS_LINES[lineIndex]}
+              </p>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
+          <div className="max-w-sm text-center">
             <p className="text-base font-medium text-rose-100 sm:text-lg">Could not build your deck</p>
             <p className="mt-2 text-sm text-zinc-300">{error}</p>
             {onDismiss ? (
               <button
                 type="button"
-                className="mt-6 rounded-full border border-white/30 bg-zinc-900/70 px-5 py-2 text-sm text-zinc-100 transition hover:border-white/50"
+                className="mt-6 rounded-full border border-white/30 bg-zinc-900/70 px-5 py-2 text-sm text-zinc-100 transition hover:border-white/50 active:scale-95"
                 onClick={onDismiss}
               >
                 Back
               </button>
             ) : null}
-          </>
-        ) : (
-          <>
-            <p className="text-base font-medium text-zinc-100 sm:text-lg">Building your deck</p>
-            <p className="mt-2 min-h-[3rem] text-sm text-zinc-300 sm:min-h-[2.75rem]" key={lineIndex}>
-              {STATUS_LINES[lineIndex]}
-            </p>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

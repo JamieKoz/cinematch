@@ -17,14 +17,21 @@ import { openTrailerUrl, openWatchUrl } from "./services/affiliate";
 import { loadBackendConfig } from "./services/backendConfig";
 import { buildWhyThisPick } from "./services/personalizationInsights";
 import {
+  clearSessionDraft,
+  loadLastAnswers,
+  loadSessionDraft,
   loadGroupHistory,
   loadSavedPicks,
+  loadSoloHistory,
   loadWatchedTitles,
+  markSoloHistoryFollowUpDone,
   markTitleWatched,
   resetPersonalization,
   saveProfile,
+  saveSessionDraft,
+  saveSoloResult,
   toggleSavedPick,
-  updateWatchedRating,
+  updateWatchedReaction,
   upsertGroupHistory
 } from "./services/storage";
 import {
@@ -34,14 +41,20 @@ import {
   setManualWatchRegion
 } from "./services/viewerPrefs";
 import type { Title, ViewerPrefs } from "./types";
+import type { SoloHistoryEntry } from "./services/storage";
+
 import { useSessionStore } from "./state/sessionStore";
 import { TasteProfileCard } from "./components/TasteProfileCard";
+import { createInitialAnswers } from "./state/machine";
 
 export function App() {
   const {
     profile,
     setProfile,
     session,
+    setSession,
+    catalog,
+    setCatalog,
     currentTitle,
     nextSwipeTitle,
     showdownLeft,
@@ -59,6 +72,7 @@ export function App() {
   const [showdownDetailsTitle, setShowdownDetailsTitle] = useState<Title | null>(null);
   const [showTastePanel, setShowTastePanel] = useState(false);
   const [showLibraryPanel, setShowLibraryPanel] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [savedPicks, setSavedPicks] = useState(() => loadSavedPicks());
   const [watchedTitles, setWatchedTitles] = useState(() => loadWatchedTitles());
   const [groupHistory, setGroupHistory] = useState(() => loadGroupHistory());
@@ -94,6 +108,13 @@ export function App() {
   const { shareFeedback, handleShareCurrentTitle } = useShareCurrentTitle(activeSwipeTitle);
   const isGroupCardFocusedPhase = groupFlow.state.phase === "swipe" || groupFlow.state.phase === "showdown";
   const [hasAttemptedRoomJoin, setHasAttemptedRoomJoin] = useState(false);
+  const [soloHistory, setSoloHistory] = useState<SoloHistoryEntry[]>(() => loadSoloHistory());
+  const showGroupFlow = groupFlow.state.phase !== "idle";
+  const groupWaitingStatus = groupFlow.state.status;
+  const savedIds = useMemo(() => new Set(savedPicks.map((entry) => entry.title.id)), [savedPicks]);
+  const winnerReasons = winner ? buildWhyThisPick(winner, session.answers, profile) : [];
+  const sharedCompromiseReasons =
+    groupFlow.sharedCompromise ? buildWhyThisPick(groupFlow.sharedCompromise, session.answers, profile) : [];
 
   function handleUndoSwipe() {
     undoSwipeSessionState();
@@ -127,6 +148,20 @@ export function App() {
     if (typeof window === "undefined") return;
     saveProfile(profile);
   }, [profile]);
+
+  // Auto-save solo result when entering the result phase
+  useEffect(() => {
+    if (session.phase === "result" && winner && !showGroupFlow && typeof window !== "undefined") {
+      saveSoloResult({
+        id: crypto.randomUUID?.() ?? `${Date.now()}`,
+        winner,
+        reasons: winnerReasons,
+        recordedAt: new Date().toISOString()
+      });
+      setSoloHistory(loadSoloHistory());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.phase]);
 
   useEffect(() => {
     if (session.phase !== "showdown") {
@@ -185,17 +220,6 @@ export function App() {
     });
   }
 
-  const showGroupFlow = groupFlow.state.phase !== "idle";
-  const groupWaitingStatus = groupFlow.state.status;
-  const savedIds = useMemo(() => new Set(savedPicks.map((entry) => entry.title.id)), [savedPicks]);
-  const watchedById = useMemo(
-    () => new Map(watchedTitles.map((entry) => [entry.title.id, entry])),
-    [watchedTitles]
-  );
-  const winnerReasons = winner ? buildWhyThisPick(winner, session.answers, profile) : [];
-  const sharedCompromiseReasons =
-    groupFlow.sharedCompromise ? buildWhyThisPick(groupFlow.sharedCompromise, session.answers, profile) : [];
-
   function refreshLibrary() {
     setSavedPicks(loadSavedPicks());
     setWatchedTitles(loadWatchedTitles());
@@ -205,16 +229,25 @@ export function App() {
   function openTastePage() {
     setShowTastePanel(true);
     setShowLibraryPanel(false);
+    setShowHistoryPanel(false);
   }
 
   function openLibraryPage() {
     setShowLibraryPanel(true);
     setShowTastePanel(false);
+    setShowHistoryPanel(false);
+  }
+
+  function openHistoryPage() {
+    setShowHistoryPanel(true);
+    setShowTastePanel(false);
+    setShowLibraryPanel(false);
   }
 
   function closeUtilityPage() {
     setShowTastePanel(false);
     setShowLibraryPanel(false);
+    setShowHistoryPanel(false);
   }
 
   function handleToggleSave(title: Title, source: "solo" | "group") {
@@ -222,20 +255,66 @@ export function App() {
     refreshLibrary();
   }
 
-  function handleMarkWatched(title: Title, source: "solo" | "group") {
-    const existing = watchedById.get(title.id);
-    const nextRating = existing?.rating ?? 4;
-    markTitleWatched(title, { source, rating: nextRating });
-    setProfile((prev) => applyWatchedSignal(prev, title, nextRating));
+  function handleSeenIt(title: Title, reaction?: "up" | "down", source: "solo" | "group" = "solo") {
+    markTitleWatched(title, { source, reaction });
+    setProfile((prev) => applyWatchedSignal(prev, title, reaction));
     refreshLibrary();
   }
 
-  function handleWatchedRating(titleId: string, rating: number) {
-    const updated = updateWatchedRating(titleId, rating);
+  function handleWatchedReaction(titleId: string, reaction?: "up" | "down") {
+    const updated = updateWatchedReaction(titleId, reaction);
     if (updated) {
-      setProfile((prev) => applyWatchedSignal(prev, updated.title, rating));
+      setProfile((prev) => applyWatchedSignal(prev, updated.title, reaction));
       refreshLibrary();
     }
+  }
+
+  const followUpCandidate = useMemo(() => {
+    const latest = soloHistory[0];
+    if (!latest || latest.followUpDone) return null;
+    const alreadySeen = watchedTitles.some((entry) => entry.title.id === latest.winner.id);
+    if (alreadySeen) return null;
+    return latest;
+  }, [soloHistory, watchedTitles]);
+
+  const hasLastAnswers = Object.keys(loadLastAnswers()).length > 0;
+
+  function handleStartFromLastTime() {
+    const seeded = createInitialAnswers(loadLastAnswers());
+    void startSwipeRound(seeded);
+  }
+
+  function handleResumeDraftSession() {
+    const draft = loadSessionDraft();
+    if (!draft) return;
+    setCatalog(draft.catalog);
+    setSession({
+      ...draft.session
+    });
+  }
+
+  function handleFollowUpResponse(reaction?: "up" | "down") {
+    if (!followUpCandidate) return;
+    if (reaction) {
+      handleSeenIt(followUpCandidate.winner, reaction, "solo");
+    }
+    markSoloHistoryFollowUpDone(followUpCandidate.id);
+    setSoloHistory(loadSoloHistory());
+  }
+
+  function handleClearTasteSignal(type: "genre" | "mood" | "provider", key: string) {
+    setProfile((prev) => {
+      const next = {
+        ...prev,
+        genreAffinity: { ...prev.genreAffinity },
+        moodAffinity: { ...prev.moodAffinity },
+        providerAffinity: { ...prev.providerAffinity }
+      };
+      if (type === "genre") next.genreAffinity[key] = 0;
+      if (type === "mood") next.moodAffinity[key] = 0;
+      if (type === "provider") next.providerAffinity[key] = 0;
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -304,6 +383,22 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [roomShareFeedback]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (session.phase === "swipe" || session.phase === "showdown") {
+      saveSessionDraft({
+        session: {
+          ...session,
+          phase: session.phase
+        },
+        catalog,
+        savedAt: new Date().toISOString()
+      });
+      return;
+    }
+    clearSessionDraft();
+  }, [session, catalog]);
+
   async function handleCopyRoomInvite() {
     const shareUrl = groupFlow.state.shareUrl;
     if (!shareUrl) return;
@@ -360,25 +455,32 @@ export function App() {
             viewerPrefs={viewerPrefs}
             onWatchRegionChange={handleWatchRegionChange}
             onClearCache={handleResetPersonalization}
+            onToggleTasteProfile={openTastePage}
+            onToggleLibrary={openLibraryPage}
+            onToggleHistory={openHistoryPage}
+            savedCount={savedPicks.length}
+            watchedCount={watchedTitles.length}
           />
         ) : null}
 
-        {session.phase === "questions" && !showGroupFlow && (showTastePanel || showLibraryPanel) ? (
-          <section className="utility-page-shell mx-auto max-w-3xl rounded-3xl border border-white/20 bg-zinc-950/45 p-5 shadow-2xl backdrop-blur-lg">
+        {!showGroupFlow && (showTastePanel || showLibraryPanel || showHistoryPanel) ? (
+          <section className="utility-page-shell mx-auto max-w-5xl rounded-3xl border border-white/20 bg-zinc-950/45 p-5 shadow-2xl backdrop-blur-lg">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                  {showTastePanel ? "Taste profile" : "Your library"}
+                  {showTastePanel ? "Your profile: Taste" : showHistoryPanel ? "Your profile: History" : "Your profile: Library"}
                 </h2>
                 <p className="mt-1 text-sm text-zinc-300">
                   {showTastePanel
                     ? "How your swipes are shaping recommendations."
-                    : "Saved picks, watched ratings, and movie-night history."}
+                    : showHistoryPanel
+                      ? "Timeline of your solo and group movie nights."
+                      : "Saved picks and your like/dislike reactions."}
                 </p>
               </div>
               <button
                 type="button"
-                className="rounded-full border border-white/30 bg-zinc-900/60 px-4 py-2 text-sm transition hover:border-white/50 hover:bg-zinc-800/75"
+                className="rounded-full border border-white/30 bg-zinc-900/60 px-4 py-2 text-sm transition hover:border-white/50 hover:bg-zinc-800/75 active:scale-95"
                 onClick={closeUtilityPage}
               >
                 Back
@@ -387,7 +489,7 @@ export function App() {
             <div className="mb-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition ${showTastePanel
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition active:scale-95 ${showTastePanel
                     ? "border-violet-300/60 bg-violet-500/20 text-violet-100"
                     : "border-white/20 bg-zinc-900/60 text-zinc-200 hover:border-white/40"
                   }`}
@@ -400,7 +502,7 @@ export function App() {
               </button>
               <button
                 type="button"
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition ${showLibraryPanel
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition active:scale-95 ${showLibraryPanel
                     ? "border-violet-300/60 bg-violet-500/20 text-violet-100"
                     : "border-white/20 bg-zinc-900/60 text-zinc-200 hover:border-white/40"
                   }`}
@@ -411,26 +513,57 @@ export function App() {
                 </svg>
                 Library
               </button>
+              <button
+                type="button"
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition active:scale-95 ${showHistoryPanel
+                    ? "border-violet-300/60 bg-violet-500/20 text-violet-100"
+                    : "border-white/20 bg-zinc-900/60 text-zinc-200 hover:border-white/40"
+                  }`}
+                onClick={openHistoryPage}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8V2zm1 5h-2v6l4.5 2.6 1-1.73-3.5-2.02z" />
+                </svg>
+                History
+              </button>
             </div>
 
-            <div key={showTastePanel ? "taste" : "library"} className="utility-page-panel">
+            <div key={showTastePanel ? "taste" : showHistoryPanel ? "history" : "library"} className="utility-page-panel">
               {showTastePanel ? (
-                <TasteProfileCard profile={profile} savedCount={savedPicks.length} watchedCount={watchedTitles.length} />
+                <TasteProfileCard
+                  profile={profile}
+                  savedCount={savedPicks.length}
+                  ratedCount={watchedTitles.length}
+                  onClearSignal={handleClearTasteSignal}
+                />
+              ) : showHistoryPanel ? (
+                <LibraryPanel
+                  saved={[]}
+                  watched={[]}
+                  soloHistory={soloHistory}
+                  history={groupHistory}
+                  onOpenTitle={(title) => setShowdownDetailsTitle(title)}
+                  onToggleSave={(title) => handleToggleSave(title, "solo")}
+                  onSetSeenReaction={handleWatchedReaction}
+                  mode="history"
+                />
               ) : (
                 <LibraryPanel
                   saved={savedPicks}
                   watched={watchedTitles}
+                  soloHistory={soloHistory}
                   history={groupHistory}
                   onOpenTitle={(title) => setShowdownDetailsTitle(title)}
                   onToggleSave={(title) => handleToggleSave(title, "solo")}
-                  onRateWatched={handleWatchedRating}
+                  onSetSeenReaction={handleWatchedReaction}
+                  mode="library"
                 />
               )}
             </div>
           </section>
         ) : null}
 
-        {session.phase === "questions" && !showGroupFlow && !showTastePanel && !showLibraryPanel ? (
+        {session.phase === "questions" && !showGroupFlow && !showTastePanel && !showLibraryPanel && !showHistoryPanel ? (
           <QuestionsSection
             answers={session.answers}
             isBuildingDeck={isBuildingDeck || groupFlow.isBusy}
@@ -439,6 +572,9 @@ export function App() {
             customYearStartPct={customYearStartPct}
             customYearEndPct={customYearEndPct}
             onBegin={beginOnboarding}
+            hasLastAnswers={hasLastAnswers}
+            hasDraftSession={Boolean(loadSessionDraft())}
+            followUpTitle={followUpCandidate?.winner}
             onUpdateAnswers={updateAnswers}
             onToggleCustomYearRange={toggleCustomYearRange}
             onUpdateCustomYearRange={updateCustomYearRange}
@@ -449,10 +585,14 @@ export function App() {
             onClearCache={handleResetPersonalization}
             onToggleTasteProfile={openTastePage}
             onToggleLibrary={openLibraryPage}
+            onToggleHistory={openHistoryPage}
             savedCount={savedPicks.length}
             watchedCount={watchedTitles.length}
             onStartSolo={startSwipeRound}
             onStartGroup={handleStartGroup}
+            onStartFromLastTime={handleStartFromLastTime}
+            onResumeSession={handleResumeDraftSession}
+            onFollowUpResponse={handleFollowUpResponse}
           />
         ) : null}
 
@@ -565,11 +705,9 @@ export function App() {
             backup={backup}
             whyThisPick={winnerReasons}
             isSaved={savedIds.has(winner.id)}
-            isWatched={watchedById.has(winner.id)}
-            watchedRating={watchedById.get(winner.id)?.rating}
             onToggleSave={() => handleToggleSave(winner, "solo")}
-            onMarkWatched={() => handleMarkWatched(winner, "solo")}
-            onRateWatched={(rating) => handleWatchedRating(winner.id, rating)}
+            seenReaction={watchedTitles.find((entry) => entry.title.id === winner.id)?.reaction}
+            onSetSeenReaction={(reaction) => handleSeenIt(winner, reaction, "solo")}
             onWatchNow={handleWatchNow}
             onWatchTrailer={() => handleWatchTrailer(winner)}
             onPickAnother={resetAndStartNewRound}
@@ -592,9 +730,11 @@ export function App() {
             compromiseMatched={groupFlow.compromiseMatched}
             whySharedPick={sharedCompromiseReasons}
             isTitleSaved={(titleId) => savedIds.has(titleId)}
-            isTitleWatched={(titleId) => watchedById.has(titleId)}
             onToggleSaveTitle={(title) => handleToggleSave(title, "group")}
-            onMarkWatchedTitle={(title) => handleMarkWatched(title, "group")}
+            onReactTitle={(title, reaction) => handleSeenIt(title, reaction, "group")}
+            titleRatings={Object.fromEntries(
+              watchedTitles.map((e) => [e.title.id, e.reaction])
+            )}
             onStartCompromiseShowdown={groupFlow.startCompromiseShowdown}
             onWatchNow={(title) => openWatchUrl(title, viewerPrefs.watchRegion)}
             onWatchTrailer={(title) => handleWatchTrailer(title)}
