@@ -28,7 +28,7 @@ export function LibraryPanel({
 }) {
   if (mode === "history") {
     return (
-      <section className="profile-panel-enter rounded-2xl bg-zinc-900/35 p-4">
+      <section className="profile-panel-enter rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-medium text-zinc-100">Timeline</h3>
           <span className="rounded-full border border-white/15 bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-300">
@@ -68,8 +68,8 @@ export function LibraryPanel({
   const stagger = (i: number) => STAGGER[Math.min(i, STAGGER.length - 1)];
 
   return (
-    <section className="profile-panel-enter rounded-2xl bg-zinc-900/35 p-4">
-      <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-3">
+    <section className="profile-panel-enter rounded-2xl p-4">
+      <div className="rounded-2xl border border-white/10 p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-medium text-zinc-100">Saved picks</h3>
           <span className="rounded-full border border-white/15 bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-300">
@@ -156,11 +156,10 @@ function PosterTile({
       {onSetReaction ? (
         <div className="mt-2 flex items-center gap-2">
           <button
-            className={`grid h-7 w-7 place-items-center rounded-full border text-sm transition active:scale-90 ${
-              reaction === "up"
-                ? "border-emerald-300/80 bg-emerald-700/50 text-emerald-100 scale-110"
-                : "border-emerald-300/55 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/60 hover:scale-105"
-            }`}
+            className={`grid h-7 w-7 place-items-center rounded-full border text-sm transition active:scale-90 ${reaction === "up"
+              ? "border-emerald-300/80 bg-emerald-700/50 text-emerald-100 scale-110"
+              : "border-emerald-300/55 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/60 hover:scale-105"
+              }`}
             onClick={() => onSetReaction(reaction === "up" ? undefined : "up")}
             aria-label="Thumbs up"
             aria-pressed={reaction === "up"}
@@ -168,11 +167,10 @@ function PosterTile({
             👍
           </button>
           <button
-            className={`grid h-7 w-7 place-items-center rounded-full border text-sm transition active:scale-90 ${
-              reaction === "down"
-                ? "border-rose-300/80 bg-rose-700/50 text-rose-100 scale-110"
-                : "border-rose-300/55 bg-rose-900/35 text-rose-100 hover:bg-rose-800/60 hover:scale-105"
-            }`}
+            className={`grid h-7 w-7 place-items-center rounded-full border text-sm transition active:scale-90 ${reaction === "down"
+              ? "border-rose-300/80 bg-rose-700/50 text-rose-100 scale-110"
+              : "border-rose-300/55 bg-rose-900/35 text-rose-100 hover:bg-rose-800/60 hover:scale-105"
+              }`}
             onClick={() => onSetReaction(reaction === "down" ? undefined : "down")}
             aria-label="Thumbs down"
             aria-pressed={reaction === "down"}

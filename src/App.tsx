@@ -450,18 +450,17 @@ export function App() {
       <div className="pointer-events-none fixed inset-0 z-10 bg-gradient-to-b from-black/35 via-black/20 to-black/45" />
 
       <main className="relative z-20 mx-auto max-w-5xl px-3 py-3 text-zinc-100 sm:px-4 sm:py-5 md:py-10 mb-16">
-        {!isCardFocusedPhase && session.phase !== "questions" && !showGroupFlow ? (
-          <AppHeader
-            viewerPrefs={viewerPrefs}
-            onWatchRegionChange={handleWatchRegionChange}
-            onClearCache={handleResetPersonalization}
-            onToggleTasteProfile={openTastePage}
-            onToggleLibrary={openLibraryPage}
-            onToggleHistory={openHistoryPage}
-            savedCount={savedPicks.length}
-            watchedCount={watchedTitles.length}
-          />
-        ) : null}
+        <AppHeader
+          viewerPrefs={viewerPrefs}
+          onWatchRegionChange={handleWatchRegionChange}
+          onClearCache={handleResetPersonalization}
+          onToggleTasteProfile={openTastePage}
+          onToggleLibrary={openLibraryPage}
+          onToggleHistory={openHistoryPage}
+          savedCount={savedPicks.length}
+          watchedCount={watchedTitles.length}
+          compact={isCardFocusedPhase || session.phase === "questions" || showGroupFlow || false}
+        />
 
         {!showGroupFlow && (showTastePanel || showLibraryPanel || showHistoryPanel) ? (
           <section className="utility-page-shell mx-auto max-w-5xl rounded-3xl border border-white/20 bg-zinc-950/45 p-5 shadow-2xl backdrop-blur-lg">

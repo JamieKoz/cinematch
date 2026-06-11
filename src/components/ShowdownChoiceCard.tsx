@@ -18,10 +18,11 @@ export function ShowdownChoiceCard({
   return (
     <div
       className={`showdown-choice showdown-choice--${side} showdown-choice--${selectionState} rounded-2xl p-2 sm:p-3`}
+
+      onClick={onPick}
     >
       <button
         className="showdown-choice__poster mx-auto block w-full max-w-[140px] overflow-hidden rounded-xl border border-transparent bg-zinc-800/70 aspect-[2/3] sm:max-w-[170px]"
-        onClick={onPick}
         aria-label={`Pick ${title.name}`}
         disabled={selectionState !== "idle"}
       >

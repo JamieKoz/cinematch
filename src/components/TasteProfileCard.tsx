@@ -18,13 +18,13 @@ export function TasteProfileCard({
   const topProviders = topSignals(profile.providerAffinity);
   const hasSignals = topGenres.length + topMoods.length + topProviders.length > 0;
   return (
-    <section className="profile-panel-enter rounded-2xl bg-zinc-900/45 p-4">
-      <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-3">
+    <section className="profile-panel-enter rounded-2xl p-4">
+      <div className="rounded-2xl border border-white/10 p-3">
         <p className="text-[11px] uppercase tracking-wide text-zinc-400">Taste summary</p>
         <ul className="mt-2 space-y-1 text-sm text-zinc-100">
-        {summary.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
+          {summary.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
         </ul>
         <p className="mt-3 text-xs text-zinc-300">
           Saved picks: {savedCount} | Seen: {ratedCount}

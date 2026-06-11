@@ -270,29 +270,11 @@ export function QuestionsSection(props: {
   return (
     <>
       <div className="onboarding-shell">
-        <div className="mb-4 flex justify-end sm:mb-6">
-          <SettingsMenu
-            viewerPrefs={viewerPrefs}
-            onWatchRegionChange={onWatchRegionChange}
-            onClearCache={onClearCache}
-            onToggleTasteProfile={onToggleTasteProfile}
-            onToggleLibrary={onToggleLibrary}
-            onToggleHistory={onToggleHistory}
-            savedCount={savedCount}
-            watchedCount={watchedCount}
-          />
-        </div>
 
         <div className="onboarding-content">
           {step === "welcome" ? (
             <div key="welcome" className="onboarding-step onboarding-step--forward onboarding-welcome">
-              <h1 className="text-4xl  uppercase tracking-wide font-semibold tracking-tight text-white sm:text-5xl md:text-6xl flex items-center">
-                <img src="/icons/sententia-v3.png" height={"200px"} width={"150px"} />
-                Sententia</h1>
-              <p className="mt-2 text-[10px] italic leading-tight text-zinc-300 opacity-80">
-                an opinion, vote, or a judicial decision
-              </p>
-              <p className="mt-4 max-w-md text-base text-zinc-300 sm:text-lg">Stop scrolling. Start Watching.</p>
+              <h1 className="mt-4 max-w-md text-[2rem] text-white">Stop scrolling.<br />Start watching.</h1>
               {followUpTitle ? (
                 <div className="follow-up-slide-in mt-6 max-w-md rounded-2xl border border-violet-300/35 bg-violet-900/20 px-4 py-3 text-left">
                   <p className="mt-1 text-sm text-zinc-100">
@@ -325,7 +307,7 @@ export function QuestionsSection(props: {
               ) : null}
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 {hasLastAnswers && onStartFromLastTime ? (
-                  <NavButton onClick={onStartFromLastTime}>Randomize</NavButton>
+                  <NavButton onClick={onStartFromLastTime}>Repeat previous</NavButton>
                 ) : null}
                 {hasDraftSession && onResumeSession ? (
                   <NavButton onClick={onResumeSession}>Resume where you left off</NavButton>

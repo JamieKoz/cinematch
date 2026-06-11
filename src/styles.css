@@ -1324,7 +1324,7 @@ body {
 
 .showdown-choice:hover::after,
 .showdown-choice:focus-within::after {
-  border-color: rgba(196, 181, 253, 0.5);
+  #border-color: rgba(196, 181, 253, 0.5);
   box-shadow: 0 16px 42px rgba(91, 33, 182, 0.22);
 }
 
@@ -1357,7 +1357,7 @@ body {
 .showdown-choice:focus-within .showdown-choice__poster {
   border-color: rgba(196, 181, 253, 0.78);
   box-shadow: 0 18px 42px rgba(76, 29, 149, 0.38);
-  transform: translateY(-3px) scale(1.01);
+  transform: translateY(0px) scale(1.01);
 }
 
 .showdown-choice:hover .showdown-choice__poster::before,

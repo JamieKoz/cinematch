@@ -9,7 +9,8 @@ export function AppHeader({
   onToggleLibrary,
   onToggleHistory,
   savedCount,
-  watchedCount
+  watchedCount,
+  compact
 }: {
   viewerPrefs: ViewerPrefs;
   onWatchRegionChange: (watchRegion: string) => void;
@@ -19,11 +20,30 @@ export function AppHeader({
   onToggleHistory?: () => void;
   savedCount?: number;
   watchedCount?: number;
+  compact?: boolean;
 }) {
   return (
-    <header className="mb-3">
+    <header className={compact ? "mb-2" : "mb-3"}>
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">Sententia</h1>
+        <div className="flex items-center">
+          <a href="/" className="flex items-center no-underline">
+            <img
+              src="/icons/sententia-v4.svg"
+              alt=""
+              className={compact ? "h-6 w-auto sm:h-16" : "h-7 w-auto sm:h-9 md:h-16"}
+            />
+            <div className="ml-6">
+              <h1 className={compact ? "text-xl font-bold tracking-tight sm:text-xl uppercase" : "text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl"}>
+                Sententia
+              </h1>
+
+
+              <p className="mt-2 text-[10px] italic leading-tight text-zinc-300 opacity-80">
+                an opinion, vote, or a judicial decision
+              </p>
+            </div>
+          </a>
+        </div>
         <SettingsMenu
           viewerPrefs={viewerPrefs}
           onWatchRegionChange={onWatchRegionChange}
@@ -34,9 +54,6 @@ export function AppHeader({
           savedCount={savedCount}
           watchedCount={watchedCount}
         />
-      </div>
-      <div>
-        <p className="text-sm text-zinc-300 md:text-base">Stop scrolling. Start Watching.</p>
       </div>
     </header>
   );
