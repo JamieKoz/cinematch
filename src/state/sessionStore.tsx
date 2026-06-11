@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { MOCK_TITLES } from "../data/mockTitles";
 import { createDefaultProfile } from "../engine/profile";
+import { persistSessionDraftIfNeeded } from "../services/sessionDraft";
 import { loadLastAnswers, loadProfile } from "../services/storage";
 import { createInitialAnswers, createSession, nextPair } from "./machine";
 import type { SessionState, TasteProfile, Title } from "../types";
@@ -36,6 +37,11 @@ export function SessionStoreProvider({ children }: { children: ReactNode }) {
   });
 
   const [catalog, setCatalog] = useState<Title[]>(MOCK_TITLES);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    persistSessionDraftIfNeeded(session, catalog);
+  }, [session, catalog]);
 
   const titlesById = useMemo(() => {
     return new Map(catalog.map((title) => [title.id, title]));

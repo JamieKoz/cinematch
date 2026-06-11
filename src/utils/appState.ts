@@ -14,9 +14,6 @@ export function deriveSmartDefaultsFromProfile(profile: TasteProfile): Partial<O
   const topLanguage = topAffinityKey(profile.languageAffinity, 0.8);
   if (topLanguage) defaults.languages = [topLanguage];
 
-  const topProvider = topAffinityKey(profile.providerAffinity, 1.2);
-  if (topProvider) defaults.providers = [topProvider];
-
   const topType = profile.typeAffinity.movie === profile.typeAffinity.series
     ? null
     : profile.typeAffinity.movie > profile.typeAffinity.series

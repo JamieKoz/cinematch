@@ -16,10 +16,9 @@ import { useSessionFlow } from "./hooks/useSessionFlow";
 import { openTrailerUrl, openWatchUrl } from "./services/affiliate";
 import { loadBackendConfig } from "./services/backendConfig";
 import { buildWhyThisPick } from "./services/personalizationInsights";
+import { hasResumableSessionDraft } from "./services/sessionDraft";
 import {
-  clearSessionDraft,
   loadLastAnswers,
-  loadSessionDraft,
   loadGroupHistory,
   loadSavedPicks,
   loadSoloHistory,
@@ -28,7 +27,6 @@ import {
   markTitleWatched,
   resetPersonalization,
   saveProfile,
-  saveSessionDraft,
   saveSoloResult,
   toggleSavedPick,
   updateWatchedReaction,
@@ -100,7 +98,8 @@ export function App() {
     handleUndoSwipe: undoSwipeSessionState,
     handleShowdownPick,
     finalizeDecision,
-    resetAndStartNewRound
+    resetAndStartNewRound,
+    resumeDraftSession
   } = useSessionFlow({ watchRegion: viewerPrefs.watchRegion });
   const groupFlow = useGroupSessionFlow({ watchRegion: viewerPrefs.watchRegion });
 
@@ -278,19 +277,12 @@ export function App() {
   }, [soloHistory, watchedTitles]);
 
   const hasLastAnswers = Object.keys(loadLastAnswers()).length > 0;
+  const hasDraftSession = session.phase === "questions" && hasResumableSessionDraft();
+  const showUtilityPage = showTastePanel || showLibraryPanel || showHistoryPanel;
 
   function handleStartFromLastTime() {
     const seeded = createInitialAnswers(loadLastAnswers());
     void startSwipeRound(seeded);
-  }
-
-  function handleResumeDraftSession() {
-    const draft = loadSessionDraft();
-    if (!draft) return;
-    setCatalog(draft.catalog);
-    setSession({
-      ...draft.session
-    });
   }
 
   function handleFollowUpResponse(reaction?: "up" | "down") {
@@ -383,22 +375,6 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [roomShareFeedback]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (session.phase === "swipe" || session.phase === "showdown") {
-      saveSessionDraft({
-        session: {
-          ...session,
-          phase: session.phase
-        },
-        catalog,
-        savedAt: new Date().toISOString()
-      });
-      return;
-    }
-    clearSessionDraft();
-  }, [session, catalog]);
-
   async function handleCopyRoomInvite() {
     const shareUrl = groupFlow.state.shareUrl;
     if (!shareUrl) return;
@@ -462,7 +438,7 @@ export function App() {
           compact={isCardFocusedPhase || session.phase === "questions" || showGroupFlow || false}
         />
 
-        {!showGroupFlow && (showTastePanel || showLibraryPanel || showHistoryPanel) ? (
+        {!showGroupFlow && showUtilityPage ? (
           <section className="utility-page-shell mx-auto max-w-5xl rounded-3xl border border-white/20 bg-zinc-950/45 p-5 shadow-2xl backdrop-blur-lg">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
@@ -562,7 +538,7 @@ export function App() {
           </section>
         ) : null}
 
-        {session.phase === "questions" && !showGroupFlow && !showTastePanel && !showLibraryPanel && !showHistoryPanel ? (
+        {session.phase === "questions" && !showGroupFlow && !showUtilityPage ? (
           <QuestionsSection
             answers={session.answers}
             isBuildingDeck={isBuildingDeck || groupFlow.isBusy}
@@ -572,7 +548,7 @@ export function App() {
             customYearEndPct={customYearEndPct}
             onBegin={beginOnboarding}
             hasLastAnswers={hasLastAnswers}
-            hasDraftSession={Boolean(loadSessionDraft())}
+            hasDraftSession={hasDraftSession}
             followUpTitle={followUpCandidate?.winner}
             onUpdateAnswers={updateAnswers}
             onToggleCustomYearRange={toggleCustomYearRange}
@@ -590,7 +566,7 @@ export function App() {
             onStartSolo={startSwipeRound}
             onStartGroup={handleStartGroup}
             onStartFromLastTime={handleStartFromLastTime}
-            onResumeSession={handleResumeDraftSession}
+            onResumeSession={resumeDraftSession}
             onFollowUpResponse={handleFollowUpResponse}
           />
         ) : null}
@@ -644,7 +620,7 @@ export function App() {
           </section>
         ) : null}
 
-        {session.phase === "swipe" && currentTitle && !showGroupFlow ? (
+        {session.phase === "swipe" && currentTitle && !showGroupFlow && !showUtilityPage ? (
           <SwipeSection
             currentTitle={currentTitle}
             nextSwipeTitle={nextSwipeTitle}
@@ -676,7 +652,7 @@ export function App() {
           />
         ) : null}
 
-        {session.phase === "showdown" && showdownLeft && showdownRight && !showGroupFlow ? (
+        {session.phase === "showdown" && showdownLeft && showdownRight && !showGroupFlow && !showUtilityPage ? (
           <ShowdownSection
             left={showdownLeft}
             right={showdownRight}
@@ -698,7 +674,7 @@ export function App() {
           />
         ) : null}
 
-        {session.phase === "result" && winner && !showGroupFlow ? (
+        {session.phase === "result" && winner && !showGroupFlow && !showUtilityPage ? (
           <ResultSection
             winner={winner}
             backup={backup}

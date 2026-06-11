@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultProfile } from "../engine/profile";
+import { clearSessionDraft, loadSessionDraft } from "../services/storage";
 import { saveLastAnswers } from "../services/storage";
 import { trackEvent } from "../services/analytics";
 import { apiGateUserMessage } from "../services/apiErrors";
@@ -22,6 +23,7 @@ export function useSessionFlow(params: {
 
   async function startSwipeRound(overrideAnswers?: OnboardingAnswers) {
     const activeAnswers = overrideAnswers ?? session.answers;
+    clearSessionDraft();
     setIsBuildingDeck(true);
     setDeckBuildError(null);
     setLastSwipeSnapshot(null);
@@ -101,7 +103,18 @@ export function useSessionFlow(params: {
   }
 
   function resetAndStartNewRound() {
+    clearSessionDraft();
+    setLastSwipeSnapshot(null);
     setSession((prev) => sessionReducer(prev, { type: "RESET_ROUND" }));
+  }
+
+  function resumeDraftSession() {
+    const draft = loadSessionDraft();
+    if (!draft) return false;
+    setCatalog((prev) => mergeCatalog(prev, draft.catalog));
+    setSession({ ...draft.session });
+    setLastSwipeSnapshot(null);
+    return true;
   }
 
   return {
@@ -114,6 +127,7 @@ export function useSessionFlow(params: {
     handleUndoSwipe,
     handleShowdownPick,
     finalizeDecision,
-    resetAndStartNewRound
+    resetAndStartNewRound,
+    resumeDraftSession
   };
 }
