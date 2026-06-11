@@ -96,7 +96,10 @@ export function buildGeneratePrompt(req: AiGenerateRequest): string {
         ? `Every suggestion must be plausibly streamable on these selected services in ${watchRegionLabel(req.watchRegion)}: ${req.answers.providers.join(", ")}.`
         : "Prefer titles that are easy to stream in the user's region.",
       "Avoid genres or themes the user listed under hardExclusions.",
-      `User watches in ${watchRegionLabel(req.watchRegion)} (${req.watchRegion}); favor titles they can plausibly access there.`
+      `User watches in ${watchRegionLabel(req.watchRegion)} (${req.watchRegion}); favor titles they can plausibly access there.`,
+      ...(req.excludeNames?.length
+        ? [`Do not suggest any of these titles (already in deck): ${req.excludeNames.join(", ")}.`]
+        : [])
     ],
     watchRegion: req.watchRegion,
     answers: req.answers,

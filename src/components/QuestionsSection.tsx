@@ -248,7 +248,6 @@ export function QuestionsSection(props: {
   }
 
   const activeQuickModeId = answers.quickModeId ?? NO_PREFERENCE_PRESET_ID;
-  const selectedQuickPreset = QUICK_PRESETS.find((preset) => preset.id === activeQuickModeId);
 
   const vibeNav = (
     <div className="onboarding-nav flex items-center justify-center gap-3">
@@ -366,11 +365,6 @@ export function QuestionsSection(props: {
               subtitle="Your vibe pre-fills these settings. Keep them or tweak anything."
             >
               <div className="onboarding-basics">
-                {selectedQuickPreset ? (
-                  <p className="mb-4 rounded-xl border border-violet-300/25 bg-violet-500/10 px-4 py-2 text-left text-sm text-violet-100">
-                    Using <strong>{selectedQuickPreset.label}</strong>. Adjust format, length, or filters to customize it.
-                  </p>
-                ) : null}
 
                 <SectionHeading title="Watching setup" subtitle="Choose solo or group before building the deck." />
                 <div className="onboarding-segment-grid onboarding-segment-grid--two">

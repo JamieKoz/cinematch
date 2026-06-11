@@ -14,6 +14,8 @@ export interface AiGenerateRequest {
   count: number;
   watchRegion: string;
   historyHints?: AiHistoryHints;
+  /** Titles already in the deck — AI should suggest different ones on refill rounds. */
+  excludeNames?: string[];
 }
 
 export interface AiHistoryHints {

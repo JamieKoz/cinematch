@@ -34,19 +34,25 @@ export function SwipeSection(props: {
   const {
     swipeDeltaX,
     isDraggingCard,
+    isCommitAnimating,
+    isAnimatingCard,
     passOverlayOpacity,
     keepOverlayOpacity,
     onSwipePointerDown,
     onSwipePointerMove,
-    onSwipePointerEnd
+    onSwipePointerEnd,
+    onSwipeTransitionEnd,
+    triggerButtonSwipe
   } = useSwipeGesture({
     currentTitleId: currentTitle.id,
     onSwipeKeep: onKeep,
     onSwipePass: onPass
   });
 
+  const swipeControlsDisabled = isCommitAnimating;
+
   const showBehindCard = Boolean(
-    nextSwipeTitle && isDraggingCard && Math.abs(swipeDeltaX) >= SWIPE_PEEK_THRESHOLD_PX
+    nextSwipeTitle && isAnimatingCard && Math.abs(swipeDeltaX) >= SWIPE_PEEK_THRESHOLD_PX
   );
 
   return (
@@ -82,7 +88,7 @@ export function SwipeSection(props: {
             className={
               isDraggingCard
                 ? "relative overflow-hidden rounded-3xl border border-white/20 bg-zinc-950/70 backdrop-blur-xl p-2 sm:p-4 shadow-2xl touch-pan-y select-none transition-none"
-                : "relative overflow-hidden rounded-3xl border border-white/20 bg-zinc-950/70 backdrop-blur-xl p-2 sm:p-4 shadow-2xl touch-pan-y select-none transition-transform duration-200 ease-out"
+                : "relative overflow-hidden rounded-3xl border border-white/20 bg-zinc-950/70 backdrop-blur-xl p-2 sm:p-4 shadow-2xl touch-pan-y select-none transition-transform duration-300 ease-out"
             }
             style={{
               transform: `translateX(${swipeDeltaX}px) rotate(${swipeDeltaX * 0.06}deg)`
@@ -92,6 +98,7 @@ export function SwipeSection(props: {
             onPointerMove={onSwipePointerMove}
             onPointerUp={onSwipePointerEnd}
             onPointerCancel={onSwipePointerEnd}
+            onTransitionEnd={onSwipeTransitionEnd}
           >
             <div
               className="pointer-events-none absolute inset-0 bg-rose-300/20 transition-opacity"
@@ -136,15 +143,17 @@ export function SwipeSection(props: {
         <div className="flex items-center justify-center gap-4 sm:gap-10">
           <button
             aria-label="Pass"
-            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition hover:bg-rose-800/55 active:scale-90"
-            onClick={onPass}
+            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition hover:bg-rose-800/55 active:scale-90 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => triggerButtonSwipe("pass")}
+            disabled={swipeControlsDisabled}
           >
             ✕
           </button>
           <button
             aria-label="Keep"
-            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition hover:bg-emerald-800/60 active:scale-90"
-            onClick={onKeep}
+            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition hover:bg-emerald-800/60 active:scale-90 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => triggerButtonSwipe("keep")}
+            disabled={swipeControlsDisabled}
           >
             ♥
           </button>
