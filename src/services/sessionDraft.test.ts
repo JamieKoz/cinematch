@@ -13,7 +13,8 @@ function title(id: string): Title {
     language: "en",
     providers: [],
     popularity: 0.5,
-    releaseYear: 2020
+    releaseYear: 2020,
+    overview: ""
   };
 }
 
