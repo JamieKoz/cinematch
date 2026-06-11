@@ -1,8 +1,9 @@
 "$schema" = "./node_modules/wrangler/config-schema.json"
 
-name = "sententia"
+# --- DEFAULT / STAGING ENVIRONMENT ---
+# Running `npx wrangler deploy` targets this.
+name = "sententia-staging"
 compatibility_date = "2026-04-12"
-
 main = "./worker/index.ts"
 
 [assets]
@@ -12,26 +13,31 @@ run_worker_first = [ "/api/*" ]
 [observability]
 enabled = true
 
-# Rate limiting (per-IP daily AI cap). Create namespaces, then paste IDs:
-#   npx wrangler kv namespace create RATE_KV
-#   npx wrangler kv namespace create RATE_KV --preview
+# Staging KV (Keep this or create a separate staging KV)
 [[kv_namespaces]]
 binding = "RATE_KV"
-id = "1ad424ad842f413aa65877cdd5024586"
-preview_id = "d29d5a57fa484536bb1637389357f95b"
+id = "1ad424ad842f413aa65877cdd5024586" 
 
-[[durable_objects.bindings]]
+# --- PRODUCTION ENVIRONMENT ---
+# Running `npx wrangler deploy --env production` targets this.
+[env.production]
+name = "sententia-production"
+
+# This forces production to ONLY map to your custom domain
+routes = [
+  { pattern = "sententia.tv/*", custom_domain = true }
+]
+
+# Production KV namespace (Ideally a separate production KV ID)
+[[env.production.kv_namespaces]]
+binding = "RATE_KV"
+id = "YOUR_PRODUCTION_KV_ID_HERE" 
+
+# Define your production Durable Objects / Migrations if needed
+[[env.production.durable_objects.bindings]]
 name = "RATE_LIMITER"
 class_name = "DailyRateLimiter"
 
-[[durable_objects.bindings]]
+[[env.production.durable_objects.bindings]]
 name = "ROOMS"
 class_name = "GroupRoomCoordinator"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["DailyRateLimiter"]
-
-[[migrations]]
-tag = "v2"
-new_sqlite_classes = ["GroupRoomCoordinator"]
