@@ -8,6 +8,7 @@ import {
   turnstileTokenFromRequest,
   verifyTurnstile
 } from "./security";
+import { readTmdbCache, tmdbCacheKey, writeTmdbCache } from "./tmdbCache";
 
 export interface Env {
   OPENAI_API_KEY?: string;
@@ -115,9 +116,73 @@ function sanitizeOpenAiPayload(
 function isAllowedTmdbPath(rest: string): boolean {
   if (rest === "/3/search/multi") return true;
   if (rest === "/3/genre/movie/list" || rest === "/3/genre/tv/list") return true;
+  if (/^\/3\/find\/[^/]+$/.test(rest)) return true;
   if (/^\/3\/(movie|tv)\/\d+$/.test(rest)) return true;
   if (/^\/3\/(movie|tv)\/\d+\/watch\/providers$/.test(rest)) return true;
   return false;
+}
+
+function tmdbCacheKv(env: Env): KVNamespace | undefined {
+  return env.RATE_KV;
+}
+
+async function proxyTmdbRequest(request: Request, env: Env): Promise<Response> {
+  const token = env.TMDB_READ_ACCESS_TOKEN;
+  if (!token) return json({ error: "TMDB is not configured" }, 503);
+
+  const url = new URL(request.url);
+  const rest = url.pathname.slice(TMDB_PREFIX.length);
+  if (!isAllowedTmdbPath(rest)) {
+    return json({ error: "TMDB path is not allowed" }, 400);
+  }
+
+  const kv = tmdbCacheKv(env);
+  const cacheKey = tmdbCacheKey(rest, url.search);
+
+  if (kv) {
+    const cached = await readTmdbCache(kv, cacheKey);
+    if (cached) {
+      return json(cached.body, 200, {
+        "X-Sententia-Cache": "hit",
+        "Cache-Control": "public, max-age=300"
+      });
+    }
+  }
+
+  const target = new URL(`https://api.themoviedb.org${rest}${url.search}`);
+  const upstream = await fetch(target, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      accept: "application/json"
+    }
+  });
+
+  if (!upstream.ok) {
+    const headers = new Headers();
+    const resCt = upstream.headers.get("content-type");
+    if (resCt) headers.set("content-type", resCt);
+    return new Response(upstream.body, { status: upstream.status, headers });
+  }
+
+  let body: unknown;
+  try {
+    body = await upstream.json();
+  } catch {
+    return json({ error: "Invalid TMDB response" }, 502);
+  }
+
+  if (kv) {
+    try {
+      await writeTmdbCache(kv, cacheKey, rest, body);
+    } catch (error) {
+      console.error("tmdb cache write failed", error);
+    }
+  }
+
+  return json(body, 200, {
+    "X-Sententia-Cache": "miss",
+    "Cache-Control": "public, max-age=300"
+  });
 }
 
 interface DoRateResponse {
@@ -941,22 +1006,8 @@ export default {
     }
 
     if (url.pathname.startsWith(`${TMDB_PREFIX}/`) && request.method === "GET") {
-      const token = env.TMDB_READ_ACCESS_TOKEN;
-      if (!token) return json({ error: "TMDB is not configured" }, 503);
-
-      const rest = url.pathname.slice(TMDB_PREFIX.length);
-      if (!isAllowedTmdbPath(rest)) {
-        return json({ error: "TMDB path is not allowed" }, 400);
-      }
-      const target = new URL(`https://api.themoviedb.org${rest}${url.search}`);
-
       try {
-        return await fetch(target, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            accept: "application/json"
-          }
-        });
+        return await proxyTmdbRequest(request, env);
       } catch (error) {
         console.error("tmdb upstream request failed", error);
         return json({ error: "Upstream TMDB request failed" }, 502);

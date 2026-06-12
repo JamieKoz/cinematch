@@ -68,7 +68,7 @@ function StepFrame({
   const nextStepLabel = NEXT_STEP_LABELS[step];
 
   return (
-    <section key={step} className={`onboarding-step onboarding-step--${direction} onboarding-step--stacked`}>
+    <section key={step} className={`onboarding-step onboarding-step--${direction} flex w-full max-w-[64rem] flex-col items-center pt-[14dvh] text-center`}>
       <div className="onboarding-progress" aria-label={`Step ${progressValue} of ${progressTotal}`}>
         <div className="onboarding-progress__meta">
           <span>{`${stepDisplayLabel}`}</span>
@@ -264,8 +264,8 @@ export function QuestionsSection(props: {
 
         <div className="onboarding-content">
           {step === "welcome" ? (
-            <div key="welcome" className="onboarding-step onboarding-step--forward onboarding-welcome">
-              <h1 className="mt-4 max-w-md text-[3rem] text-white">Your next watch<br />Decided now.</h1>
+            <div key="welcome" className="onboarding-step onboarding-step--forward flex w-full flex-col items-center justify-start pt-[25dvh] text-center">
+              <h1 className="mt-4 max-w-md text-[3rem] text-white">Your next watch<br />Decided now</h1>
               <h1 className="mt-4 max-w-md text-base text-white">Stop scrolling. Start watching.</h1>
               {followUpTitle ? (
                 <div className="follow-up-slide-in mt-6 max-w-md rounded-2xl border border-violet-300/35 bg-violet-900/20 px-4 py-3 text-left">

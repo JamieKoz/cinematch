@@ -399,26 +399,6 @@ body {
   animation-name: onboarding-step-back;
 }
 
-.onboarding-welcome {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 30dvh;
-  text-align: center;
-}
-
-.onboarding-step--stacked {
-  display: flex;
-  width: 100%;
-  max-width: 64rem;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 14dvh;
-  text-align: center;
-}
-
 .onboarding-progress {
   width: 100%;
   max-width: 22rem;
