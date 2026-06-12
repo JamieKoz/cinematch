@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractMessageTextContent,
+  extractStreamingGenerateSuggestions,
   normalizeImdbId,
   parseGeneratePayload,
   parseOptionalPositiveInt,
@@ -94,6 +95,27 @@ describe("normalizeImdbId", () => {
   it("normalizes tt-prefixed and numeric ids", () => {
     expect(normalizeImdbId("tt0468569")).toBe("tt0468569");
     expect(normalizeImdbId(468569)).toBe("tt0468569");
+  });
+});
+
+describe("extractStreamingGenerateSuggestions", () => {
+  it("extracts complete suggestion objects from partial JSON", () => {
+    const chunks = [
+      '{"suggestions":[{"name":"Inception","type":"movie","tmdb_id":27205,"imdb_id":"tt1375666","reason":"Mind-bending"},',
+      '{"name":"Heat","type":"movie","tmdb_id":949,"imdb_id":"tt0113277","reason":"Crime classic"}]}'
+    ];
+    let buffer = "";
+    let emitted = 0;
+    const collected: string[] = [];
+
+    for (const chunk of chunks) {
+      buffer += chunk;
+      const extracted = extractStreamingGenerateSuggestions(buffer, emitted);
+      emitted = extracted.emittedCount;
+      collected.push(...extracted.suggestions.map((item) => item.name));
+    }
+
+    expect(collected).toEqual(["Inception", "Heat"]);
   });
 });
 

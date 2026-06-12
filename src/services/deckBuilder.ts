@@ -1,11 +1,15 @@
 import { passesAiDeckConstraints, passesCandidateConstraints, prepareSwipeCandidatePool } from "../engine/candidateFilters";
 import { createDefaultProfile } from "../engine/profile";
 import { rankTitles } from "../engine/scoring";
-import type { AiHistoryHints } from "./ai";
-import { generateSuggestionsWithAi, rerankCandidatesWithAi } from "./ai";
+import type { AiHistoryHints, AiSuggestedTitle } from "./ai";
+import { rerankCandidatesWithAi, streamGenerateSuggestionsForRequest } from "./ai";
 import { assertCanBuildAiDeck, fetchAiQuota } from "./aiQuota";
 import { loadBackendConfig } from "./backendConfig";
-import { createSyntheticAiTitle, enrichTitlesWithTmdb, resolveAiSuggestionsToTitles } from "./tmdb";
+import {
+  createSyntheticAiTitle,
+  enrichTitlesWithTmdb,
+  resolveSingleAiSuggestionToTitle
+} from "./tmdb";
 import { buildDeck, DECK_SIZE, fillDeckFromSources } from "../state/machine";
 import type { OnboardingAnswers, TasteProfile, Title } from "../types";
 import { mergeCatalog } from "../utils/appState";
@@ -82,19 +86,89 @@ function mergeUniqueTitles(existing: Title[], incoming: Title[]): Title[] {
   return merged;
 }
 
-async function resolveAiSuggestions(
-  generated: Awaited<ReturnType<typeof generateSuggestionsWithAi>>,
+async function resolveStreamedSuggestion(
+  suggestion: AiSuggestedTitle,
+  index: number,
   answers: OnboardingAnswers,
   profile: TasteProfile,
   watchRegion: string,
   tmdbEnabled: boolean
-): Promise<Title[]> {
-  if (generated.length === 0) return [];
+): Promise<Title | null> {
   if (tmdbEnabled) {
-    const maxCandidates = Math.min(AI_GENERATION_CANDIDATE_COUNT * 2, generated.length * 2);
-    return resolveAiSuggestionsToTitles(generated, answers, profile, maxCandidates, watchRegion);
+    return resolveSingleAiSuggestionToTitle(suggestion, index, answers, profile, watchRegion);
   }
-  return generated.map((item, index) => createSyntheticAiTitle(item, answers, index));
+  return createSyntheticAiTitle(suggestion, answers, index);
+}
+
+async function streamAndResolveSuggestions(params: {
+  answers: OnboardingAnswers;
+  profile: TasteProfile;
+  watchRegion: string;
+  historyHints: AiHistoryHints;
+  blockedIds: Set<string>;
+  tmdbEnabled: boolean;
+  count: number;
+  excludeNames?: string[];
+  targetResolvedCount: number;
+}): Promise<Title[]> {
+  const {
+    answers,
+    profile,
+    watchRegion,
+    historyHints,
+    blockedIds,
+    tmdbEnabled,
+    count,
+    excludeNames,
+    targetResolvedCount
+  } = params;
+
+  const deckTitles: Title[] = [];
+  const seenIds = new Set<string>();
+  const pending: Promise<void>[] = [];
+  const abortController = new AbortController();
+  let suggestionIndex = 0;
+
+  const maybeAbort = () => {
+    if (deckTitles.length >= targetResolvedCount) {
+      abortController.abort();
+    }
+  };
+
+  await streamGenerateSuggestionsForRequest(
+    {
+      answers,
+      profile,
+      count,
+      watchRegion,
+      historyHints,
+      excludeNames
+    },
+    (suggestion) => {
+      if (abortController.signal.aborted) return;
+      const currentIndex = suggestionIndex;
+      suggestionIndex += 1;
+      const task = resolveStreamedSuggestion(
+        suggestion,
+        currentIndex,
+        answers,
+        profile,
+        watchRegion,
+        tmdbEnabled
+      ).then((title) => {
+        if (!title || seenIds.has(title.id)) return;
+        if (!filterDeckTitles([title], answers, true, blockedIds).length) return;
+        seenIds.add(title.id);
+        deckTitles.push(title);
+        maybeAbort();
+      });
+      pending.push(task);
+    },
+    { signal: abortController.signal, maxSuggestions: count }
+  );
+
+  await Promise.all(pending);
+  return deckTitles;
 }
 
 async function accumulateAiDeckTitles(params: {
@@ -106,39 +180,34 @@ async function accumulateAiDeckTitles(params: {
   tmdbEnabled: boolean;
 }): Promise<Title[]> {
   const { answers, profile, watchRegion, historyHints, blockedIds, tmdbEnabled } = params;
-  let deckTitles: Title[] = [];
-
-  const initialGenerated = await generateSuggestionsWithAi({
+  let deckTitles = await streamAndResolveSuggestions({
     answers,
     profile,
-    count: AI_GENERATION_CANDIDATE_COUNT,
     watchRegion,
-    historyHints
+    historyHints,
+    blockedIds,
+    tmdbEnabled,
+    count: AI_GENERATION_CANDIDATE_COUNT,
+    targetResolvedCount: DECK_SIZE
   });
-
-  if (initialGenerated.length > 0) {
-    const resolved = await resolveAiSuggestions(initialGenerated, answers, profile, watchRegion, tmdbEnabled);
-    deckTitles = filterDeckTitles(resolved, answers, true, blockedIds);
-  }
 
   let refillRound = 0;
   while (deckTitles.length < DECK_SIZE && refillRound < MAX_AI_REFILL_ROUNDS) {
     const beforeCount = deckTitles.length;
-    const refillGenerated = await generateSuggestionsWithAi({
+    const refillTitles = await streamAndResolveSuggestions({
       answers,
       profile,
-      count: AI_REFILL_CANDIDATE_COUNT,
       watchRegion,
       historyHints,
-      excludeNames: deckTitles.map((title) => title.name)
+      blockedIds,
+      tmdbEnabled,
+      count: AI_REFILL_CANDIDATE_COUNT,
+      excludeNames: deckTitles.map((title) => title.name),
+      targetResolvedCount: DECK_SIZE - deckTitles.length
     });
-    if (refillGenerated.length === 0) break;
+    if (refillTitles.length === 0) break;
 
-    const resolved = await resolveAiSuggestions(refillGenerated, answers, profile, watchRegion, tmdbEnabled);
-    deckTitles = mergeUniqueTitles(
-      deckTitles,
-      filterDeckTitles(resolved, answers, true, blockedIds)
-    );
+    deckTitles = mergeUniqueTitles(deckTitles, refillTitles);
     refillRound += 1;
     if (deckTitles.length === beforeCount) break;
   }

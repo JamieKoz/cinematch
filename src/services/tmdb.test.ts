@@ -31,6 +31,7 @@ describe("resolveAiSuggestionsToTitles", () => {
       if (url.includes("/movie/155")) {
         return jsonResponse({
           title: "The Dark Knight",
+          release_date: "2008-07-18",
           overview: "Batman faces the Joker.",
           poster_path: "/dark-knight.jpg",
           genres: [{ id: 28, name: "Action" }],
@@ -65,6 +66,7 @@ describe("resolveAiSuggestionsToTitles", () => {
 
     expect(title?.id).toBe("tmdb-movie-155");
     expect(title?.name).toBe("The Dark Knight");
+    expect(title?.releaseYear).toBe(2008);
     expect(title?.imdbId).toBe("tt0468569");
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/search/multi"))).toBe(false);
   });

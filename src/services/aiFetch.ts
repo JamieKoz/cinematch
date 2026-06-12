@@ -61,3 +61,32 @@ async function withOpenAiGateHeaders(url: string, init: RequestInit): Promise<Re
   headers.set("X-Turnstile-Token", token);
   return { ...init, headers };
 }
+
+export async function fetchOpenAiCompletions(
+  url: string,
+  init: RequestInit,
+  signal?: AbortSignal
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutMs = DEFAULT_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const abortFromParent = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", abortFromParent, { once: true });
+  }
+
+  try {
+    const requestInit = await withOpenAiGateHeaders(url, init);
+    const response = await fetch(url, {
+      ...requestInit,
+      signal: controller.signal
+    });
+    await throwIfApiGateError(response);
+    return response;
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", abortFromParent);
+  }
+}

@@ -39,7 +39,7 @@ export function AppHeader({
 
 
               <p className="text-[10px] italic leading-tight text-zinc-300 opacity-80">
-                an opinion, vote, or a judicial decision
+                Your next watch, decided now
               </p>
             </div>
           </a>

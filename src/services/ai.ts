@@ -9,6 +9,7 @@ import {
   safeParseJson,
   validateRerankPermutation
 } from "./aiJson";
+import { isStreamRecoverableError, streamGenerateSuggestionsWithAi } from "./aiStream";
 import { buildGeneratePrompt, buildRerankPrompt } from "./aiPrompts";
 import type { AiGenerateRequest, AiRerankRequest, AiSuggestedTitle } from "./aiTypes";
 
@@ -49,6 +50,32 @@ export async function generateSuggestionsWithAi(req: AiGenerateRequest): Promise
 
   console.warn(`${AI_LOG} generate produced no usable suggestions`);
   return [];
+}
+
+export async function streamGenerateSuggestionsForRequest(
+  req: AiGenerateRequest,
+  onSuggestion: (suggestion: AiSuggestedTitle) => void | Promise<void>,
+  options: { signal?: AbortSignal; maxSuggestions?: number } = {}
+): Promise<number> {
+  const config = await getAiRuntime();
+  if (!config) return 0;
+
+  for (const model of config.models) {
+    try {
+      const count = await streamGenerateWithModel(
+        { ...req, model },
+        onSuggestion,
+        { ...options, maxSuggestions: options.maxSuggestions ?? req.count }
+      );
+      if (count > 0) return count;
+    } catch (error) {
+      if (error instanceof ApiGateError) throw error;
+      if (!isStreamRecoverableError(error)) return 0;
+      console.warn(`${AI_LOG} generate stream failed model=${model}`, error);
+    }
+  }
+
+  return 0;
 }
 
 interface ModelAttempt extends AiRerankRequest {
@@ -119,9 +146,9 @@ async function tryRerankWithModel(input: ModelAttempt): Promise<string[]> {
   }
 }
 
-async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSuggestedTitle[]> {
+function buildGenerateRequestBody(input: GenerateModelAttempt): Record<string, unknown> {
   const prompt = buildGeneratePrompt(input);
-  const body = {
+  return {
     model: input.model,
     temperature: 0.4,
     response_format: { type: "json_object" },
@@ -134,12 +161,48 @@ async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSugg
       { role: "user", content: prompt }
     ]
   };
+}
+
+async function streamGenerateWithModel(
+  input: GenerateModelAttempt,
+  onSuggestion: (suggestion: AiSuggestedTitle) => void | Promise<void>,
+  options: { signal?: AbortSignal; maxSuggestions?: number } = {}
+): Promise<number> {
+  const collected: AiSuggestedTitle[] = [];
+
+  const count = await streamGenerateSuggestionsWithAi(
+    buildGenerateRequestBody(input),
+    async (raw) => {
+      const [normalized] = normalizeSuggestions([raw], 1);
+      if (!normalized) return;
+      collected.push(normalized);
+      await onSuggestion(normalized);
+    },
+    options
+  );
+
+  if (count > 0) return count;
+  return 0;
+}
+
+async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSuggestedTitle[]> {
+  try {
+    const streamed: AiSuggestedTitle[] = [];
+    const count = await streamGenerateWithModel(input, (suggestion) => {
+      streamed.push(suggestion);
+    }, { maxSuggestions: input.count });
+    if (count > 0) return normalizeSuggestions(streamed, input.count);
+  } catch (error) {
+    if (error instanceof ApiGateError) throw error;
+    if (!isStreamRecoverableError(error)) return [];
+    console.warn(`${AI_LOG} generate stream fallback model=${input.model}`, error);
+  }
 
   try {
     const response = await fetchWithTimeoutAndRetries(OPENAI_COMPLETIONS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(buildGenerateRequestBody(input))
     });
 
     if (!response.ok) {

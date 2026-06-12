@@ -79,13 +79,14 @@ export async function enrichTitlesWithTmdb(titles: Title[], watchRegion: string)
 
       if (!mediaType || tmdbId === undefined) return title;
 
-      const year = best
-        ? parseYear(best.release_date ?? best.first_air_date) ?? title.releaseYear
-        : title.releaseYear;
       const details =
         mediaType && tmdbId !== undefined
           ? await fetchTmdbDetails(mediaType, tmdbId, watchRegion)
           : null;
+      const year =
+        details?.releaseYear ??
+        (best ? parseYear(best.release_date ?? best.first_air_date) : undefined) ??
+        title.releaseYear;
       const genresFromSearch = best
         ? (best.genre_ids ?? []).map((id) => genreLookup.get(id)).filter((name): name is string => Boolean(name))
         : [];
@@ -157,6 +158,23 @@ export function createSyntheticAiTitle(
     posterPath: null,
     overview: suggestion.reason?.trim() || "AI-picked for your current vibe."
   };
+}
+
+export async function resolveSingleAiSuggestionToTitle(
+  suggestion: AiSuggestedTitle,
+  index: number,
+  answers: OnboardingAnswers,
+  profile: TasteProfile,
+  watchRegion: string
+): Promise<Title | null> {
+  const genreLookup = await getGenreLookup();
+  const rejectedIds = new Set(profile.rejectedIds);
+  return resolveSuggestionToTitle(suggestion, index, {
+    answers,
+    watchRegion,
+    genreLookup,
+    rejectedIds
+  });
 }
 
 export async function resolveAiSuggestionsToTitles(
@@ -326,6 +344,7 @@ async function buildTitleFromTmdbId(input: {
     suggestion.name
   ).trim();
   const releaseYear =
+    details.releaseYear ??
     parseYear(searchMatch?.release_date ?? searchMatch?.first_air_date) ??
     syntheticFallback?.releaseYear ??
     new Date().getFullYear();
@@ -423,8 +442,12 @@ function parseYear(date: string | undefined): number | undefined {
 }
 
 interface TmdbDetailResponse {
+  title?: string;
+  name?: string;
   overview?: string;
   poster_path?: string | null;
+  release_date?: string;
+  first_air_date?: string;
   genres?: Array<{ id: number; name: string }>;
   vote_average?: number;
   runtime?: number;
@@ -450,6 +473,7 @@ interface TmdbVideosResponse {
 interface TmdbDetailSummary {
   overview?: string;
   posterPath?: string | null;
+  releaseYear?: number;
   genres: string[];
   cast?: string[];
   voteAverage?: number;
@@ -513,9 +537,14 @@ async function fetchTmdbDetails(
       }
     }
 
+    const releaseYear = parseYear(
+      mediaType === "movie" ? data.release_date : data.first_air_date ?? data.release_date
+    );
+
     return {
       overview: data.overview,
       posterPath: data.poster_path ?? null,
+      releaseYear,
       genres,
       cast: cast.length ? cast : undefined,
       voteAverage: data.vote_average,

@@ -18,13 +18,13 @@ export function ShowdownChoiceCard({
   return (
     <div
       className={`showdown-choice showdown-choice--${side} showdown-choice--${selectionState} rounded-2xl p-2 sm:p-3`}
-
-      onClick={onPick}
     >
       <button
+        type="button"
         className="showdown-choice__poster mx-auto block w-full max-w-[140px] overflow-hidden rounded-xl border border-transparent bg-zinc-800/70 aspect-[2/3] sm:max-w-[170px]"
         aria-label={`Pick ${title.name}`}
         disabled={selectionState !== "idle"}
+        onClick={onPick}
       >
         {poster ? (
           <img
@@ -42,6 +42,7 @@ export function ShowdownChoiceCard({
       </p>
       <div className="showdown-choice__actions mt-2 grid gap-2">
         <button
+          type="button"
           className="showdown-choice__pick rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 text-xs font-medium text-white shadow-lg shadow-violet-900/35 transition hover:brightness-110"
           onClick={onPick}
           disabled={selectionState !== "idle"}
@@ -49,8 +50,12 @@ export function ShowdownChoiceCard({
           Pick this
         </button>
         <button
+          type="button"
           className="showdown-choice__details rounded-full border border-white/25 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-zinc-800/75"
-          onClick={onShowMore}
+          onClick={(event) => {
+            event.stopPropagation();
+            onShowMore();
+          }}
           disabled={selectionState !== "idle"}
         >
           Show more

@@ -91,6 +91,25 @@ export function normalizeImdbId(raw: unknown): string | undefined {
   return undefined;
 }
 
+export function parseGenerateSuggestionItem(item: unknown): AiSuggestedTitle | null {
+  if (!item || typeof item !== "object") return null;
+  const rec = item as Record<string, unknown>;
+  const name = typeof rec.name === "string" ? rec.name.trim() : "";
+  const typeRaw = rec.type;
+  const type = typeRaw === "series" ? "series" : typeRaw === "movie" ? "movie" : undefined;
+  const reason = typeof rec.reason === "string" ? rec.reason.trim() : undefined;
+  const tmdb_id = parseOptionalPositiveInt(rec.tmdb_id);
+  const imdb_id = normalizeImdbId(rec.imdb_id ?? rec.imdb_Id);
+  if (!name || !type) return null;
+  return {
+    name,
+    type,
+    ...(tmdb_id !== undefined ? { tmdb_id } : {}),
+    ...(imdb_id ? { imdb_id } : {}),
+    reason: reason || undefined
+  };
+}
+
 export function parseGeneratePayload(parsed: unknown): AiSuggestedTitle[] | null {
   if (!parsed || typeof parsed !== "object") return null;
   const raw = (parsed as { suggestions?: unknown }).suggestions;
@@ -98,22 +117,70 @@ export function parseGeneratePayload(parsed: unknown): AiSuggestedTitle[] | null
 
   const out: AiSuggestedTitle[] = [];
   for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const rec = item as Record<string, unknown>;
-    const name = typeof rec.name === "string" ? rec.name.trim() : "";
-    const typeRaw = rec.type;
-    const type = typeRaw === "series" ? "series" : typeRaw === "movie" ? "movie" : undefined;
-    const reason = typeof rec.reason === "string" ? rec.reason.trim() : undefined;
-    const tmdb_id = parseOptionalPositiveInt(rec.tmdb_id);
-    const imdb_id = normalizeImdbId(rec.imdb_id ?? rec.imdb_Id);
-    if (!name || !type) continue;
-    out.push({
-      name,
-      type,
-      ...(tmdb_id !== undefined ? { tmdb_id } : {}),
-      ...(imdb_id ? { imdb_id } : {}),
-      reason: reason || undefined
-    });
+    const parsedItem = parseGenerateSuggestionItem(item);
+    if (parsedItem) out.push(parsedItem);
   }
   return out;
+}
+
+/** Pull newly completed suggestion objects from a partial streamed JSON payload. */
+export function extractStreamingGenerateSuggestions(
+  buffer: string,
+  emittedCount: number
+): { suggestions: AiSuggestedTitle[]; emittedCount: number } {
+  const suggestionsKey = buffer.indexOf('"suggestions"');
+  if (suggestionsKey < 0) return { suggestions: [], emittedCount };
+
+  const arrayStart = buffer.indexOf("[", suggestionsKey);
+  if (arrayStart < 0) return { suggestions: [], emittedCount };
+
+  const suggestions: AiSuggestedTitle[] = [];
+  let index = arrayStart + 1;
+  let objectIndex = 0;
+
+  while (index < buffer.length) {
+    while (index < buffer.length && /[\s,]/.test(buffer[index]!)) index += 1;
+    if (index >= buffer.length || buffer[index] === "]") break;
+    if (buffer[index] !== "{") break;
+
+    const objectStart = index;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (; index < buffer.length; index += 1) {
+      const char = buffer[index]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+      if (char === "{") depth += 1;
+      if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          index += 1;
+          if (objectIndex >= emittedCount) {
+            try {
+              const parsedItem = parseGenerateSuggestionItem(JSON.parse(buffer.slice(objectStart, index)));
+              if (parsedItem) suggestions.push(parsedItem);
+            } catch {
+              return { suggestions, emittedCount: objectIndex };
+            }
+          }
+          objectIndex += 1;
+          break;
+        }
+      }
+    }
+
+    if (depth !== 0) break;
+  }
+
+  return { suggestions, emittedCount: objectIndex };
 }
