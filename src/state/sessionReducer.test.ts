@@ -14,15 +14,26 @@ describe("sessionReducer", () => {
     expect(next.showdownQueue).toEqual([]);
   });
 
-  it("moves to showdown once shortlist target is reached", () => {
-    let state = sessionReducer(createSession(createInitialAnswers()), { type: "DECK_READY", deck: ["a", "b", "c", "d", "e"] });
+  it("stays in swipe until the deck is exhausted", () => {
+    let state = sessionReducer(createSession(createInitialAnswers()), {
+      type: "DECK_READY",
+      deck: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]
+    });
+    for (const id of ["a", "b", "c", "d", "e"]) {
+      state = sessionReducer(state, { type: "SWIPE", action: "keep", titleId: id });
+      expect(state.phase).toBe("swipe");
+    }
+    expect(state.deckCursor).toBe(5);
+    expect(state.shortlist).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  it("moves to showdown after the last card when multiple titles were kept", () => {
+    let state = sessionReducer(createSession(createInitialAnswers()), { type: "DECK_READY", deck: ["a", "b", "c"] });
     state = sessionReducer(state, { type: "SWIPE", action: "keep", titleId: "a" });
     state = sessionReducer(state, { type: "SWIPE", action: "keep", titleId: "b" });
-    state = sessionReducer(state, { type: "SWIPE", action: "keep", titleId: "c" });
-    state = sessionReducer(state, { type: "SWIPE", action: "keep", titleId: "d" });
-    state = sessionReducer(state, { type: "SWIPE", action: "keep", titleId: "e" });
+    state = sessionReducer(state, { type: "SWIPE", action: "pass", titleId: "c" });
     expect(state.phase).toBe("showdown");
-    expect(state.showdownQueue).toEqual(["a", "b", "c", "d", "e"]);
+    expect(state.showdownQueue).toEqual(["a", "b"]);
   });
 
   it("goes to result when deck ends with one keep", () => {

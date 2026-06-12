@@ -38,7 +38,7 @@ export function AppHeader({
               </h1>
 
 
-              <p className="mt-2 text-[10px] italic leading-tight text-zinc-300 opacity-80">
+              <p className="text-[10px] italic leading-tight text-zinc-300 opacity-80">
                 an opinion, vote, or a judicial decision
               </p>
             </div>

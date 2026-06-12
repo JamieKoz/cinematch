@@ -2,8 +2,6 @@ import { phaseAfterDeckExhausted, resultFromSingleKeep, retryAnswersAfterEmptyKe
 import { createInitialAnswers, createSession } from "./machine";
 import type { OnboardingAnswers, SessionState } from "../types";
 
-const SHORTLIST_TARGET = 5;
-
 type SessionAction =
   | { type: "DECK_READY"; deck: string[] }
   | { type: "SWIPE"; action: "keep" | "pass"; titleId: string }
@@ -30,16 +28,6 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
     const shortlist = action.action === "keep" ? [...state.shortlist, action.titleId] : state.shortlist;
     const passed = action.action === "pass" ? [...state.passed, action.titleId] : state.passed;
     const nextCursor = state.deckCursor + 1;
-
-    if (shortlist.length >= SHORTLIST_TARGET) {
-      return {
-        ...state,
-        phase: "showdown",
-        shortlist,
-        passed,
-        showdownQueue: [...shortlist]
-      };
-    }
 
     if (nextCursor >= state.deck.length) {
       const endPhase = phaseAfterDeckExhausted(shortlist, passed);

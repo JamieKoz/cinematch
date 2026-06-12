@@ -66,18 +66,18 @@ export async function enrichTitlesWithTmdb(titles: Title[], watchRegion: string)
       const parsed = parseTmdbCatalogId(title.id);
       let mediaType: "movie" | "tv" | undefined = parsed?.mediaType;
       let tmdbId = parsed?.tmdbId;
-
-      const results = await searchTmdbTitle(title.name);
-      const best = findBestMatch(results, title);
+      let best: TmdbSearchResult | null = null;
 
       if (!mediaType || tmdbId === undefined) {
+        const results = await searchTmdbTitle(title.name);
+        best = findBestMatch(results, title);
         if (best?.media_type === "movie" || best?.media_type === "tv") {
           mediaType = best.media_type;
           tmdbId = best.id;
         }
       }
 
-      if (!best && !parsed) return title;
+      if (!mediaType || tmdbId === undefined) return title;
 
       const year = best
         ? parseYear(best.release_date ?? best.first_air_date) ?? title.releaseYear
@@ -206,87 +206,81 @@ async function resolveSuggestionToTitle(
   }
 ): Promise<Title | null> {
   const { answers, watchRegion, genreLookup, rejectedIds } = context;
+  const expectedMediaType = suggestionMediaType(suggestion.type);
+
+  const directId = suggestion.tmdb_id;
+  if (directId !== undefined) {
+    const catalogId = `tmdb-${expectedMediaType}-${directId}`;
+    if (!rejectedIds.has(catalogId)) {
+      const fromId = await buildTitleFromTmdbId({
+        suggestion,
+        answers,
+        watchRegion,
+        genreLookup,
+        mediaType: expectedMediaType,
+        tmdbId: directId
+      });
+      if (fromId) return fromId;
+    }
+  }
+
+  if (suggestion.imdb_id) {
+    const found = await findTmdbByImdbId(suggestion.imdb_id, expectedMediaType);
+    if (found) {
+      const catalogId = `tmdb-${found.mediaType}-${found.id}`;
+      if (!rejectedIds.has(catalogId)) {
+        const fromImdb = await buildTitleFromTmdbId({
+          suggestion,
+          answers,
+          watchRegion,
+          genreLookup,
+          mediaType: found.mediaType,
+          tmdbId: found.id
+        });
+        if (fromImdb) return fromImdb;
+      }
+    }
+  }
+
   const results = await searchTmdbTitle(suggestion.name);
   const match = strictSearchMatch(results, suggestion.name, suggestion.type);
   let picked: Title | null = null;
 
   if (match && (match.media_type === "movie" || match.media_type === "tv")) {
-    const media = match.media_type;
-    const id = `tmdb-${media}-${match.id}`;
-    if (!rejectedIds.has(id)) {
-      const details = await fetchTmdbDetails(media, match.id, watchRegion);
-      const year = parseYear(match.release_date ?? match.first_air_date);
-      const regionalProviders =
-        details?.providers ?? (await fetchWatchProvidersForTmdbId(media, match.id, watchRegion));
-      const genresFromSearch = (match.genre_ids ?? [])
-        .map((gid) => genreLookup.get(gid))
-        .filter((name): name is string => Boolean(name));
-      const genres = details?.genres?.length ? details.genres : genresFromSearch;
-      const resolvedType: TitleType = media === "tv" ? "series" : "movie";
-      const displayName = (match.title ?? match.name ?? suggestion.name).trim();
-
-      picked = {
-        id,
-        name: displayName,
-        type: resolvedType,
-        runtimeMinutes: details?.runtimeMinutes ?? (resolvedType === "series" ? 45 : 110),
-        genres: genres.length ? genres : [],
-        moods: [...answers.moods],
-        language: answers.languages[0] ?? "en",
-        providers: resolveTitleProviders(regionalProviders, answers.providers, true),
-        popularity: typeof match.vote_average === "number" ? Math.min(1, match.vote_average / 10) : 0.55,
-        releaseYear: year ?? new Date().getFullYear(),
-        imdbId: details?.imdbId,
-        youtubeTrailerId: details?.youtubeTrailerId,
-        posterPath: details?.posterPath ?? match.poster_path ?? null,
-        overview: details?.overview?.trim() || match.overview?.trim() || suggestion.reason?.trim() || "",
-        rating: details?.voteAverage ?? match.vote_average,
-        cast: details?.cast
-      };
-    }
+    picked = await buildTitleFromTmdbId({
+      suggestion,
+      answers,
+      watchRegion,
+      genreLookup,
+      mediaType: match.media_type,
+      tmdbId: match.id,
+      searchMatch: match
+    });
+    if (picked && rejectedIds.has(picked.id)) picked = null;
   }
 
   if (!picked) {
     const synthetic = createSyntheticAiTitle(suggestion, answers, index);
     if (passesAiDeckConstraints(synthetic, answers)) {
       const posterHint = findBestMatch(results, synthetic);
-      const expectedMediaType: "movie" | "tv" = synthetic.type === "series" ? "tv" : "movie";
       const matchedHint: (TmdbSearchResult & { media_type: "movie" | "tv" }) | null =
         posterHint?.media_type === expectedMediaType
           ? { ...posterHint, media_type: expectedMediaType }
           : null;
-      const details = matchedHint
-        ? await fetchTmdbDetails(matchedHint.media_type, matchedHint.id, watchRegion)
-        : null;
-      const regionalProviders =
-        matchedHint
-          ? details?.providers ?? (await fetchWatchProvidersForTmdbId(matchedHint.media_type, matchedHint.id, watchRegion))
-          : [];
-      const genresFromSearch = matchedHint
-        ? (matchedHint.genre_ids ?? [])
-          .map((gid) => genreLookup.get(gid))
-          .filter((name): name is string => Boolean(name))
-        : [];
-      const genres = details?.genres?.length ? details.genres : genresFromSearch;
-      const displayName = matchedHint
-        ? (matchedHint.title ?? matchedHint.name ?? synthetic.name).trim() || synthetic.name
-        : synthetic.name;
-
-      picked = {
-        ...synthetic,
-        id: matchedHint ? `tmdb-${matchedHint.media_type}-${matchedHint.id}` : synthetic.id,
-        name: displayName,
-        runtimeMinutes: details?.runtimeMinutes ?? synthetic.runtimeMinutes,
-        genres: genres.length ? genres : synthetic.genres,
-        providers: resolveTitleProviders(regionalProviders, synthetic.providers, Boolean(matchedHint)),
-        imdbId: details?.imdbId,
-        youtubeTrailerId: details?.youtubeTrailerId,
-        posterPath: posterHint?.poster_path ?? synthetic.posterPath ?? null,
-        releaseYear: parseYear(posterHint?.release_date ?? posterHint?.first_air_date) ?? synthetic.releaseYear,
-        overview: details?.overview?.trim() || posterHint?.overview?.trim() || synthetic.overview,
-        rating: details?.voteAverage ?? posterHint?.vote_average,
-        cast: details?.cast
-      };
+      if (matchedHint) {
+        picked = await buildTitleFromTmdbId({
+          suggestion,
+          answers,
+          watchRegion,
+          genreLookup,
+          mediaType: matchedHint.media_type,
+          tmdbId: matchedHint.id,
+          searchMatch: matchedHint,
+          syntheticFallback: synthetic
+        });
+      } else {
+        picked = synthetic;
+      }
     }
   } else if (!picked.posterPath) {
     const posterHint = findBestMatch(results, picked);
@@ -296,6 +290,107 @@ async function resolveSuggestionToTitle(
   }
 
   return picked;
+}
+
+function suggestionMediaType(type: TitleType): "movie" | "tv" {
+  return type === "series" ? "tv" : "movie";
+}
+
+async function buildTitleFromTmdbId(input: {
+  suggestion: AiSuggestedTitle;
+  answers: OnboardingAnswers;
+  watchRegion: string;
+  genreLookup: Map<number, string>;
+  mediaType: "movie" | "tv";
+  tmdbId: number;
+  searchMatch?: TmdbSearchResult;
+  syntheticFallback?: Title;
+}): Promise<Title | null> {
+  const { suggestion, answers, watchRegion, genreLookup, mediaType, tmdbId, searchMatch, syntheticFallback } = input;
+  const details = await fetchTmdbDetails(mediaType, tmdbId, watchRegion);
+  if (!details) return null;
+
+  const regionalProviders =
+    details.providers ?? (await fetchWatchProvidersForTmdbId(mediaType, tmdbId, watchRegion));
+  const genresFromSearch = searchMatch
+    ? (searchMatch.genre_ids ?? [])
+      .map((gid) => genreLookup.get(gid))
+      .filter((name): name is string => Boolean(name))
+    : [];
+  const genres = details.genres?.length ? details.genres : genresFromSearch;
+  const resolvedType: TitleType = mediaType === "tv" ? "series" : "movie";
+  const displayName = (
+    searchMatch?.title ??
+    searchMatch?.name ??
+    syntheticFallback?.name ??
+    suggestion.name
+  ).trim();
+  const releaseYear =
+    parseYear(searchMatch?.release_date ?? searchMatch?.first_air_date) ??
+    syntheticFallback?.releaseYear ??
+    new Date().getFullYear();
+
+  return {
+    id: `tmdb-${mediaType}-${tmdbId}`,
+    name: displayName || suggestion.name,
+    type: resolvedType,
+    runtimeMinutes: details.runtimeMinutes ?? syntheticFallback?.runtimeMinutes ?? (resolvedType === "series" ? 45 : 110),
+    genres: genres.length ? genres : syntheticFallback?.genres ?? [],
+    moods: syntheticFallback?.moods ?? [...answers.moods],
+    language: syntheticFallback?.language ?? answers.languages[0] ?? "en",
+    providers: resolveTitleProviders(
+      regionalProviders,
+      syntheticFallback?.providers ?? answers.providers,
+      true
+    ),
+    popularity:
+      typeof searchMatch?.vote_average === "number"
+        ? Math.min(1, searchMatch.vote_average / 10)
+        : syntheticFallback?.popularity ?? 0.55,
+    releaseYear,
+    imdbId: details.imdbId ?? suggestion.imdb_id,
+    youtubeTrailerId: details.youtubeTrailerId,
+    posterPath: details.posterPath ?? searchMatch?.poster_path ?? syntheticFallback?.posterPath ?? null,
+    overview:
+      details.overview?.trim() ||
+      searchMatch?.overview?.trim() ||
+      syntheticFallback?.overview ||
+      suggestion.reason?.trim() ||
+      "",
+    rating: details.voteAverage ?? searchMatch?.vote_average ?? syntheticFallback?.rating,
+    cast: details.cast
+  };
+}
+
+interface TmdbFindResponse {
+  movie_results?: Array<{ id: number }>;
+  tv_results?: Array<{ id: number }>;
+}
+
+const imdbFindCache = new Map<string, Promise<{ mediaType: "movie" | "tv"; id: number } | null>>();
+
+async function findTmdbByImdbId(
+  imdbId: string,
+  expectedMediaType: "movie" | "tv"
+): Promise<{ mediaType: "movie" | "tv"; id: number } | null> {
+  const key = `${imdbId}:${expectedMediaType}`;
+  let cached = imdbFindCache.get(key);
+  if (!cached) {
+    cached = (async () => {
+      const response = await fetch(
+        `${API_BASE}/find/${encodeURIComponent(imdbId)}?external_source=imdb_id`,
+        { headers: { accept: "application/json" } }
+      );
+      if (!response.ok) return null;
+      const data = (await response.json()) as TmdbFindResponse;
+      const bucket = expectedMediaType === "movie" ? data.movie_results : data.tv_results;
+      const match = bucket?.find((entry) => typeof entry.id === "number" && entry.id > 0);
+      if (!match) return null;
+      return { mediaType: expectedMediaType, id: match.id };
+    })();
+    imdbFindCache.set(key, cached);
+  }
+  return cached;
 }
 
 function findBestMatch(results: TmdbSearchResult[], title: Title): TmdbSearchResult | null {

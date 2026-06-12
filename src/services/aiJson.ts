@@ -66,6 +66,31 @@ export function validateRerankPermutation(orderedIds: string[], candidates: { id
   return orderedIds;
 }
 
+export function parseOptionalPositiveInt(raw: unknown): number | undefined {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const value = Math.floor(raw);
+    return value > 0 ? value : undefined;
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const value = parseInt(raw.trim(), 10);
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+  return undefined;
+}
+
+export function normalizeImdbId(raw: unknown): string | undefined {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim().toLowerCase();
+    if (/^tt\d+$/.test(trimmed)) return trimmed;
+    if (/^\d+$/.test(trimmed)) return `tt${trimmed.padStart(7, "0")}`;
+    return undefined;
+  }
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return `tt${String(Math.floor(raw)).padStart(7, "0")}`;
+  }
+  return undefined;
+}
+
 export function parseGeneratePayload(parsed: unknown): AiSuggestedTitle[] | null {
   if (!parsed || typeof parsed !== "object") return null;
   const raw = (parsed as { suggestions?: unknown }).suggestions;
@@ -79,8 +104,16 @@ export function parseGeneratePayload(parsed: unknown): AiSuggestedTitle[] | null
     const typeRaw = rec.type;
     const type = typeRaw === "series" ? "series" : typeRaw === "movie" ? "movie" : undefined;
     const reason = typeof rec.reason === "string" ? rec.reason.trim() : undefined;
+    const tmdb_id = parseOptionalPositiveInt(rec.tmdb_id);
+    const imdb_id = normalizeImdbId(rec.imdb_id ?? rec.imdb_Id);
     if (!name || !type) continue;
-    out.push({ name, type, reason: reason || undefined });
+    out.push({
+      name,
+      type,
+      ...(tmdb_id !== undefined ? { tmdb_id } : {}),
+      ...(imdb_id ? { imdb_id } : {}),
+      reason: reason || undefined
+    });
   }
   return out;
 }

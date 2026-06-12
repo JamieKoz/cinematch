@@ -29,5 +29,7 @@ export interface AiHistoryHints {
 export interface AiSuggestedTitle {
   name: string;
   type: "movie" | "series";
+  tmdb_id?: number;
+  imdb_id?: string;
   reason?: string;
 }

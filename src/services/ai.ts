@@ -129,7 +129,7 @@ async function tryGenerateWithModel(input: GenerateModelAttempt): Promise<AiSugg
       {
         role: "system",
         content:
-          "You recommend watchable titles. Return strict JSON only in the shape {\"suggestions\":[{\"name\":\"\",\"type\":\"movie|series\",\"reason\":\"\"}]}"
+          "You recommend watchable titles. Return strict JSON only in the shape {\"suggestions\":[{\"name\":\"\",\"type\":\"movie|series\",\"tmdb_id\":0,\"imdb_id\":\"tt0000000\",\"reason\":\"\"}]}. Use the real TMDB numeric id and IMDb tt-id for each title."
       },
       { role: "user", content: prompt }
     ]
@@ -182,7 +182,13 @@ function normalizeSuggestions(suggestions: AiSuggestedTitle[], count: number): A
     const key = `${name.toLowerCase()}::${type}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    valid.push({ name, type, reason: item.reason?.trim() });
+    valid.push({
+      name,
+      type,
+      ...(item.tmdb_id !== undefined ? { tmdb_id: item.tmdb_id } : {}),
+      ...(item.imdb_id ? { imdb_id: item.imdb_id } : {}),
+      reason: item.reason?.trim()
+    });
     if (valid.length >= count) break;
   }
 

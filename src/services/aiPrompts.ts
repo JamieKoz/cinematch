@@ -119,7 +119,7 @@ export function buildGeneratePrompt(req: AiGenerateRequest): string {
     },
     history: compactHistory(req.historyHints),
     outputShape: {
-      suggestions: [{ name: "string", type: "movie|series", reason: "short reason" }]
+      suggestions: [{ name: "string", type: "movie|series", tmdb_id: 27205, imdb_id: "tt1375666", reason: "short reason" }]
     }
   });
 }

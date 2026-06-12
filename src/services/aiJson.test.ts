@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   extractMessageTextContent,
+  normalizeImdbId,
   parseGeneratePayload,
+  parseOptionalPositiveInt,
   parseRerankPayload,
   safeParseJson,
   validateRerankPermutation
@@ -79,18 +81,34 @@ describe("validateRerankPermutation", () => {
   });
 });
 
+describe("parseOptionalPositiveInt", () => {
+  it("accepts positive integers and rejects invalid values", () => {
+    expect(parseOptionalPositiveInt(155)).toBe(155);
+    expect(parseOptionalPositiveInt("27205")).toBe(27205);
+    expect(parseOptionalPositiveInt(0)).toBeUndefined();
+    expect(parseOptionalPositiveInt("nope")).toBeUndefined();
+  });
+});
+
+describe("normalizeImdbId", () => {
+  it("normalizes tt-prefixed and numeric ids", () => {
+    expect(normalizeImdbId("tt0468569")).toBe("tt0468569");
+    expect(normalizeImdbId(468569)).toBe("tt0468569");
+  });
+});
+
 describe("parseGeneratePayload", () => {
   it("parses valid suggestions", () => {
     const parsed = parseGeneratePayload({
       suggestions: [
-        { name: "  The Matrix ", type: "movie", reason: " test " },
+        { name: "  The Matrix ", type: "movie", tmdb_id: 603, imdb_id: "tt0133093", reason: " test " },
         { name: "Bad", type: "other" },
-        { name: "Severance", type: "series" }
+        { name: "Severance", type: "series", imdb_Id: 13623632 }
       ]
     });
     expect(parsed).toEqual([
-      { name: "The Matrix", type: "movie", reason: "test" },
-      { name: "Severance", type: "series", reason: undefined }
+      { name: "The Matrix", type: "movie", tmdb_id: 603, imdb_id: "tt0133093", reason: "test" },
+      { name: "Severance", type: "series", imdb_id: "tt13623632", reason: undefined }
     ]);
   });
 

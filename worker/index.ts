@@ -65,6 +65,8 @@ interface GroupRoomTitle {
 interface OpenAiSuggestion {
   name: string;
   type: TitleType;
+  tmdb_id?: number;
+  imdb_id?: string;
 }
 
 function json(data: unknown, status = 200, extraHeaders?: Record<string, string>): Response {
@@ -277,10 +279,10 @@ function normalizeGroupRoomAnswers(raw: unknown): GroupRoomAnswers | null {
     languages: normalizeStringList(input.languages),
     releaseWindow:
       releaseWindow === "2020s" ||
-      releaseWindow === "2010s" ||
-      releaseWindow === "2000s" ||
-      releaseWindow === "pre-2000" ||
-      releaseWindow === "any"
+        releaseWindow === "2010s" ||
+        releaseWindow === "2000s" ||
+        releaseWindow === "pre-2000" ||
+        releaseWindow === "any"
         ? releaseWindow
         : "any",
     customYearRange: normalizeYearRange(input.customYearRange),
@@ -318,7 +320,7 @@ function buildGeneratePromptForRoom(answers: GroupRoomAnswers, watchRegion: stri
     watchRegion,
     answers,
     outputShape: {
-      suggestions: [{ name: "string", type: "movie|series" }]
+      suggestions: [{ name: "string", type: "movie|series", tmdb_id: 27205, imdb_id: "tt1375666", reason: "short reason" }]
     }
   });
 }
@@ -356,7 +358,7 @@ async function generateAiSuggestionsForRoom(
           {
             role: "system",
             content:
-              'Return strict JSON in the shape {"suggestions":[{"name":"","type":"movie|series"}]}.'
+              'Return strict JSON in the shape {"suggestions":[{"name":"","type":"movie|series","tmdb_id":0,"imdb_id":"tt0000000"}]}. Use real TMDB and IMDb ids.'
           },
           {
             role: "user",
@@ -375,23 +377,32 @@ async function generateAiSuggestionsForRoom(
         ? content
         : Array.isArray(content)
           ? content
-              .filter((part) => part?.type === "text" && typeof part.text === "string")
-              .map((part) => part.text ?? "")
-              .join("\n")
+            .filter((part) => part?.type === "text" && typeof part.text === "string")
+            .map((part) => part.text ?? "")
+            .join("\n")
           : "";
     if (!text) return [];
-    const parsed = JSON.parse(text) as { suggestions?: Array<{ name?: unknown; type?: unknown }> };
+    const parsed = JSON.parse(text) as {
+      suggestions?: Array<{ name?: unknown; type?: unknown; tmdb_id?: unknown; imdb_id?: unknown; imdb_Id?: unknown }>;
+    };
     if (!Array.isArray(parsed.suggestions)) return [];
     const seen = new Set<string>();
     const out: OpenAiSuggestion[] = [];
     for (const item of parsed.suggestions) {
       const name = typeof item.name === "string" ? item.name.trim() : "";
       const type = item.type === "movie" || item.type === "series" ? item.type : null;
+      const tmdb_id = parseOptionalPositiveInt(item.tmdb_id);
+      const imdb_id = normalizeImdbId(item.imdb_id ?? item.imdb_Id);
       if (!name || !type) continue;
       const key = `${name.toLowerCase()}::${type}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ name, type });
+      out.push({
+        name,
+        type,
+        ...(tmdb_id !== undefined ? { tmdb_id } : {}),
+        ...(imdb_id ? { imdb_id } : {})
+      });
       if (out.length >= GROUP_DECK_SIZE) break;
     }
     return out;
@@ -422,12 +433,26 @@ async function resolveSuggestionToTitle(
 ): Promise<GroupRoomTitle | null> {
   const token = env.TMDB_READ_ACCESS_TOKEN;
   if (!token) return null;
+  const mediaType = suggestion.type === "movie" ? "movie" : "tv";
+
+  if (suggestion.tmdb_id !== undefined) {
+    const fromId = await fetchTmdbTitleDetails(token, mediaType, suggestion.tmdb_id, watchRegion, moods);
+    if (fromId) return fromId;
+  }
+
+  if (suggestion.imdb_id) {
+    const found = await findTmdbByImdbId(token, suggestion.imdb_id, mediaType);
+    if (found) {
+      const fromImdb = await fetchTmdbTitleDetails(token, found.mediaType, found.id, watchRegion, moods);
+      if (fromImdb) return fromImdb;
+    }
+  }
+
   const search = new URL("https://api.themoviedb.org/3/search/multi");
   search.searchParams.set("query", suggestion.name);
   search.searchParams.set("include_adult", "false");
   search.searchParams.set("language", "en-US");
   const searchData = await tmdbFetchJson<{ results?: Array<Record<string, unknown>> }>(token, search);
-  const mediaType = suggestion.type === "movie" ? "movie" : "tv";
   const match = (searchData.results ?? []).find((item) => {
     if ((item.media_type as string) !== mediaType) return false;
     if (typeof item.id !== "number") return false;
@@ -435,6 +460,48 @@ async function resolveSuggestionToTitle(
   });
   if (!match || typeof match.id !== "number") return null;
   return fetchTmdbTitleDetails(token, mediaType, match.id, watchRegion, moods);
+}
+
+function parseOptionalPositiveInt(raw: unknown): number | undefined {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const value = Math.floor(raw);
+    return value > 0 ? value : undefined;
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const value = parseInt(raw.trim(), 10);
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+  return undefined;
+}
+
+function normalizeImdbId(raw: unknown): string | undefined {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim().toLowerCase();
+    if (/^tt\d+$/.test(trimmed)) return trimmed;
+    if (/^\d+$/.test(trimmed)) return `tt${trimmed.padStart(7, "0")}`;
+    return undefined;
+  }
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return `tt${String(Math.floor(raw)).padStart(7, "0")}`;
+  }
+  return undefined;
+}
+
+async function findTmdbByImdbId(
+  token: string,
+  imdbId: string,
+  expectedMediaType: "movie" | "tv"
+): Promise<{ mediaType: "movie" | "tv"; id: number } | null> {
+  const findUrl = new URL(`https://api.themoviedb.org/3/find/${encodeURIComponent(imdbId)}`);
+  findUrl.searchParams.set("external_source", "imdb_id");
+  const data = await tmdbFetchJson<{
+    movie_results?: Array<{ id?: unknown }>;
+    tv_results?: Array<{ id?: unknown }>;
+  }>(token, findUrl);
+  const bucket = expectedMediaType === "movie" ? data.movie_results : data.tv_results;
+  const match = bucket?.find((entry) => typeof entry.id === "number" && entry.id > 0);
+  if (!match || typeof match.id !== "number") return null;
+  return { mediaType: expectedMediaType, id: match.id };
 }
 
 async function fetchFallbackTitles(env: Env, watchRegion: string, moods: string[]): Promise<GroupRoomTitle[]> {
@@ -474,8 +541,8 @@ async function fetchTmdbTitleDetails(
   if (typeof rawName !== "string" || !rawName.trim()) return null;
   const genres = Array.isArray(details.genres)
     ? details.genres
-        .map((genre) => (typeof genre === "object" && genre && typeof (genre as { name?: unknown }).name === "string" ? (genre as { name: string }).name : null))
-        .filter((name): name is string => Boolean(name))
+      .map((genre) => (typeof genre === "object" && genre && typeof (genre as { name?: unknown }).name === "string" ? (genre as { name: string }).name : null))
+      .filter((name): name is string => Boolean(name))
     : [];
   const runtimeMinutes =
     mediaType === "movie"
@@ -488,9 +555,9 @@ async function fetchTmdbTitleDetails(
   const providers = extractProviders(details, watchRegion);
   const cast = Array.isArray((details.credits as { cast?: unknown[] } | undefined)?.cast)
     ? ((details.credits as { cast: Array<{ name?: unknown }> }).cast
-        .map((item) => (typeof item?.name === "string" ? item.name : null))
-        .filter((name): name is string => Boolean(name))
-        .slice(0, 6))
+      .map((item) => (typeof item?.name === "string" ? item.name : null))
+      .filter((name): name is string => Boolean(name))
+      .slice(0, 6))
     : [];
 
   return {
@@ -919,7 +986,7 @@ async function parseDailyRateLimitFromBody(request: Request): Promise<number> {
 export class DailyRateLimiter implements DurableObject {
   private static readonly CLEANUP_DELAY_MS = 26 * 60 * 60 * 1000;
 
-  constructor(private readonly state: DurableObjectState) {}
+  constructor(private readonly state: DurableObjectState) { }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -987,7 +1054,7 @@ export class DailyRateLimiter implements DurableObject {
 }
 
 export class GroupRoomCoordinator implements DurableObject {
-  constructor(private readonly state: DurableObjectState) {}
+  constructor(private readonly state: DurableObjectState) { }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
