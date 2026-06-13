@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { WATCH_REGION_OPTIONS } from "../config/regions";
 import { formatViewerRegionHint } from "../services/viewerPrefs";
 import type { ViewerPrefs } from "../types";
@@ -10,7 +11,8 @@ export function SettingsMenu({
   onToggleLibrary,
   onToggleHistory,
   savedCount,
-  watchedCount
+  watchedCount,
+  accountSection
 }: {
   viewerPrefs: ViewerPrefs;
   onWatchRegionChange: (watchRegion: string) => void;
@@ -20,6 +22,7 @@ export function SettingsMenu({
   onToggleHistory?: () => void;
   savedCount?: number;
   watchedCount?: number;
+  accountSection?: ReactNode;
 }) {
   function handleResetAllData() {
     if (typeof window === "undefined") {
@@ -38,9 +41,12 @@ export function SettingsMenu({
     <details className="group relative ml-auto">
       <summary className="summary-no-marker list-none cursor-pointer rounded-full border border-white/30 bg-zinc-900/60 p-2 text-sm text-zinc-100 backdrop-blur-md transition hover:border-white/50 hover:bg-zinc-800/70 active:scale-90">
         <span className="sr-only">Settings</span>
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg"><g id="SVGRepo_bgCarrier" strokeWidth="0"></g><g id="SVGRepo_tracerCarrier" strokeLinecap="round" strokeLinejoin="round"></g><g id="SVGRepo_iconCarrier"> <path d="M4 18L20 18" stroke="#ffffff" strokeWidth="2" strokeLinecap="round"></path> <path d="M4 12L20 12" stroke="#ffffff" strokeWidth="2" strokeLinecap="round"></path> <path d="M4 6L20 6" stroke="#ffffff" strokeWidth="2" strokeLinecap="round"></path> </g></svg>
+        <svg width="100%" height="100%" className="h-5 w-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 21C20 19.6044 20 18.9067 19.8278 18.3389C19.44 17.0605 18.4395 16.06 17.1611 15.6722C16.5933 15.5 15.8956 15.5 14.5 15.5H9.5C8.10444 15.5 7.40665 15.5 6.83886 15.6722C5.56045 16.06 4.56004 17.0605 4.17224 18.3389C4 18.9067 4 19.6044 4 21M16.5 7.5C16.5 9.98528 14.4853 12 12 12C9.51472 12 7.5 9.98528 7.5 7.5C7.5 5.01472 9.51472 3 12 3C14.4853 3 16.5 5.01472 16.5 7.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </summary>
       <div className="absolute right-0 z-30 mt-2 w-56 rounded-xl border border-white/20 bg-zinc-900/90 p-3 shadow-2xl backdrop-blur-xl">
+        {accountSection}
         {onToggleTasteProfile || onToggleLibrary || onToggleHistory ? (
           <div className="">
             <p className="text-[11px] uppercase tracking-wide text-zinc-400">Personalization</p>

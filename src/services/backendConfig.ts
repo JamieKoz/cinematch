@@ -5,6 +5,7 @@ export type BackendConfig = {
   tmdb: boolean;
   openaiModels: string[];
   turnstileSiteKey: string | null;
+  clerkPublishableKey: string | null;
   turnstileRequired: boolean;
   aiDailyLimit: number;
 };
@@ -38,6 +39,7 @@ function defaultBackendConfig(): BackendConfig {
     tmdb: false,
     openaiModels: [],
     turnstileSiteKey: null,
+    clerkPublishableKey: null,
     turnstileRequired: false,
     aiDailyLimit: 30
   };
@@ -53,6 +55,10 @@ function normalizeBackendConfig(data: Partial<BackendConfig>): BackendConfig {
     turnstileSiteKey:
       typeof data.turnstileSiteKey === "string" && data.turnstileSiteKey.trim()
         ? data.turnstileSiteKey.trim()
+        : null,
+    clerkPublishableKey:
+      typeof data.clerkPublishableKey === "string" && data.clerkPublishableKey.trim()
+        ? data.clerkPublishableKey.trim()
         : null,
     turnstileRequired: Boolean(data.turnstileRequired),
     aiDailyLimit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : defaults.aiDailyLimit

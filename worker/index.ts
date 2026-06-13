@@ -9,6 +9,8 @@ import {
   verifyTurnstile
 } from "./security";
 import { readTmdbCache, tmdbCacheKey, writeTmdbCache } from "./tmdbCache";
+import { handleUserDataRequest } from "./routes/userData";
+import { clerkPublishableKeyFromEnv } from "./clerkEnv";
 
 export interface Env {
   OPENAI_API_KEY?: string;
@@ -17,10 +19,15 @@ export interface Env {
   TMDB_READ_ACCESS_TOKEN?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  CLERK_SECRET_KEY?: string;
+  CLERK_PUBLISHABLE_KEY?: string;
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?: string;
+  VITE_CLERK_PUBLISHABLE_KEY?: string;
   AI_DAILY_LIMIT?: string;
   RATE_KV?: KVNamespace;
   RATE_LIMITER?: DurableObjectNamespace;
   ROOMS?: DurableObjectNamespace;
+  DB?: D1Database;
 }
 
 const OPENAI_PATH = "/api/openai/chat/completions";
@@ -753,9 +760,15 @@ export default {
         tmdb: Boolean(env.TMDB_READ_ACCESS_TOKEN),
         openaiModels,
         turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? null,
+        clerkPublishableKey: clerkPublishableKeyFromEnv(env),
         aiDailyLimit,
         turnstileRequired: Boolean(env.TURNSTILE_SECRET_KEY)
       });
+    }
+
+    const userDataResponse = await handleUserDataRequest(request, env);
+    if (userDataResponse) {
+      return userDataResponse;
     }
 
     if (url.pathname === "/api/ai-quota" && request.method === "GET") {

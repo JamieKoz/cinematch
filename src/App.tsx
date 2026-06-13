@@ -38,10 +38,12 @@ import {
   saveViewerPrefs,
   setManualWatchRegion
 } from "./services/viewerPrefs";
-import type { Title, ViewerPrefs } from "./types";
+import type { OnboardingAnswers, Title, ViewerPrefs } from "./types";
 import type { SoloHistoryEntry } from "./services/storage";
 
 import { useSessionStore } from "./state/sessionStore";
+import { AuthPersistenceSync } from "./components/AuthPersistenceSync";
+import { useClerkEnabled } from "./components/ClerkAppShell";
 import { TasteProfileCard } from "./components/TasteProfileCard";
 import { createInitialAnswers } from "./state/machine";
 
@@ -50,6 +52,7 @@ export function App() {
     profile,
     setProfile,
     session,
+    setSession,
     currentTitle,
     nextSwipeTitle,
     showdownLeft,
@@ -107,6 +110,7 @@ export function App() {
   const [hasAttemptedRoomJoin, setHasAttemptedRoomJoin] = useState(false);
   const [soloHistory, setSoloHistory] = useState<SoloHistoryEntry[]>(() => loadSoloHistory());
   const showGroupFlow = groupFlow.state.phase !== "idle";
+  const clerkEnabled = useClerkEnabled();
   const groupWaitingStatus = groupFlow.state.status;
   const savedIds = useMemo(() => new Set(savedPicks.map((entry) => entry.title.id)), [savedPicks]);
   const winnerReasons = winner ? buildWhyThisPick(winner, session.answers, profile) : [];
@@ -126,6 +130,13 @@ export function App() {
     void loadBackendConfig();
     void bootstrapViewerPrefs().then(setViewerPrefs);
   }, []);
+
+  const setSessionAnswers = useMemo(
+    () => (answers: OnboardingAnswers) => {
+      setSession((prev) => ({ ...prev, answers }));
+    },
+    [setSession]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -419,6 +430,14 @@ export function App() {
 
   return (
     <div className="relative min-h-screen">
+      {clerkEnabled ? (
+        <AuthPersistenceSync
+          setProfile={setProfile}
+          setSessionAnswers={setSessionAnswers}
+          setSavedPicks={setSavedPicks}
+          setWatchedTitles={setWatchedTitles}
+        />
+      ) : null}
       <ThumbnailBackdrop />
       <div className="pointer-events-none fixed inset-0 z-10 bg-[radial-gradient(ellipse_85%_70%_at_50%_45%,rgba(0,0,0,0.15),rgba(0,0,0,0.92))]" />
       <div className="pointer-events-none fixed inset-0 z-10 bg-gradient-to-b from-black/35 via-black/20 to-black/45" />

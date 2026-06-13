@@ -1,6 +1,16 @@
 import { createDefaultProfile } from "../engine/profile";
 import { DEFAULT_WATCH_REGION, normalizeWatchRegion } from "../config/regions";
 import type { OnboardingAnswers, TasteProfile, Title, ViewerPrefs } from "../types";
+import {
+  clearSessionDraftRemote,
+  removeSavedPickRemote,
+  syncAnswersRemote,
+  syncProfileRemote,
+  syncSavedPickRemote,
+  syncSessionDraftRemote,
+  syncWatchedReactionRemote,
+  syncWatchedTitleRemote
+} from "./persistenceBridge";
 
 export function createDefaultViewerPrefs(): ViewerPrefs {
   return {
@@ -140,6 +150,7 @@ export function loadProfile(): TasteProfile {
 
 export function saveProfile(profile: TasteProfile): void {
   safeSetItem(PROFILE_KEY, JSON.stringify(profile));
+  syncProfileRemote(profile);
 }
 
 export function loadLastAnswers(): Partial<OnboardingAnswers> {
@@ -149,7 +160,9 @@ export function loadLastAnswers(): Partial<OnboardingAnswers> {
 }
 
 export function saveLastAnswers(answers: OnboardingAnswers): void {
-  safeSetItem(ANSWERS_KEY, JSON.stringify(sanitizeCachedAnswers(answers)));
+  const sanitized = sanitizeCachedAnswers(answers);
+  safeSetItem(ANSWERS_KEY, JSON.stringify(sanitized));
+  syncAnswersRemote(sanitized);
 }
 
 export function loadViewerPrefsFromStorage(): ViewerPrefs {
@@ -191,6 +204,7 @@ export function toggleSavedPick(title: Title, source: "solo" | "group"): boolean
   if (existing >= 0) {
     saved.splice(existing, 1);
     safeSetItem(SAVED_PICKS_KEY, JSON.stringify(saved));
+    removeSavedPickRemote(title.id);
     return false;
   }
 
@@ -201,6 +215,7 @@ export function toggleSavedPick(title: Title, source: "solo" | "group"): boolean
   };
   const deduped = [next, ...saved.filter((entry) => entry.title.id !== title.id)].slice(0, MAX_LIBRARY_ITEMS);
   safeSetItem(SAVED_PICKS_KEY, JSON.stringify(deduped));
+  syncSavedPickRemote(title, source, next.savedAt);
   return true;
 }
 
@@ -233,6 +248,7 @@ export function markTitleWatched(
   };
   const deduped = [next, ...watched.filter((entry) => entry.title.id !== title.id)].slice(0, MAX_LIBRARY_ITEMS);
   safeSetItem(WATCHED_TITLES_KEY, JSON.stringify(deduped));
+  syncWatchedTitleRemote(next);
   return next;
 }
 
@@ -247,6 +263,7 @@ export function updateWatchedReaction(titleId: string, reaction?: "up" | "down")
   };
   watched.splice(index, 1);
   safeSetItem(WATCHED_TITLES_KEY, JSON.stringify([updated, ...watched]));
+  syncWatchedReactionRemote(titleId, reaction);
   return updated;
 }
 
@@ -314,10 +331,18 @@ export function loadSessionDraft(): SessionDraft | null {
 
 export function saveSessionDraft(draft: SessionDraft): void {
   safeSetItem(SESSION_DRAFT_KEY, JSON.stringify(draft));
+  syncSessionDraftRemote(draft);
+}
+
+/** Persist draft locally without triggering remote sync (used during server hydration). */
+export function saveSessionDraftLocalOnly(draft: SessionDraft): void {
+  safeSetItem(SESSION_DRAFT_KEY, JSON.stringify(draft));
 }
 
 export function clearSessionDraft(): void {
+  const existing = loadSessionDraft();
   safeRemoveItem(SESSION_DRAFT_KEY);
+  clearSessionDraftRemote(existing?.session.sessionId);
 }
 
 function migrateProfile(parsed: Partial<TasteProfile>): TasteProfile {

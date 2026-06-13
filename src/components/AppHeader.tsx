@@ -1,4 +1,7 @@
 import { SettingsMenu } from "./SettingsMenu";
+import { AuthHeaderButtons } from "./AuthHeaderButtons";
+import { SignedInAccountSection } from "./SignedInAccountSection";
+import { useClerkEnabled } from "./ClerkAppShell";
 import type { ViewerPrefs } from "../types";
 
 export function AppHeader({
@@ -22,6 +25,8 @@ export function AppHeader({
   watchedCount?: number;
   compact?: boolean;
 }) {
+  const clerkEnabled = useClerkEnabled();
+
   return (
     <header className={compact ? "mb-2" : "mb-3"}>
       <div className="flex items-center justify-between gap-2">
@@ -44,16 +49,20 @@ export function AppHeader({
             </div>
           </a>
         </div>
-        <SettingsMenu
-          viewerPrefs={viewerPrefs}
-          onWatchRegionChange={onWatchRegionChange}
-          onClearCache={onClearCache}
-          onToggleTasteProfile={onToggleTasteProfile}
-          onToggleLibrary={onToggleLibrary}
-          onToggleHistory={onToggleHistory}
-          savedCount={savedCount}
-          watchedCount={watchedCount}
-        />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {clerkEnabled ? <AuthHeaderButtons /> : null}
+          <SettingsMenu
+            viewerPrefs={viewerPrefs}
+            onWatchRegionChange={onWatchRegionChange}
+            onClearCache={onClearCache}
+            onToggleTasteProfile={onToggleTasteProfile}
+            onToggleLibrary={onToggleLibrary}
+            onToggleHistory={onToggleHistory}
+            savedCount={savedCount}
+            watchedCount={watchedCount}
+            accountSection={clerkEnabled ? <SignedInAccountSection /> : null}
+          />
+        </div>
       </div>
     </header>
   );

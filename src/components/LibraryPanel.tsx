@@ -90,7 +90,7 @@ export function LibraryPanel({
           ))}
         </div>
       </div>
-      <div className="mt-4 rounded-2xl border border-white/10 bg-zinc-950/35 p-3">
+      <div className="mt-4 rounded-2xl p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-medium text-zinc-100">Reactions</h3>
           <span className="rounded-full border border-white/15 bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-300">
@@ -138,9 +138,9 @@ function PosterTile({
 }) {
   const poster = tmdbPosterUrl(title.posterPath, "w342");
   return (
-    <article className={`poster-tile-enter poster-tile-hover ${enterClass} rounded-xl border border-white/15 bg-zinc-950/55 p-3`}>
-      <button className="block w-full text-left active:opacity-75 transition-opacity" onClick={() => onOpenTitle(title)}>
-        <div className="mx-auto h-40 w-28 overflow-hidden rounded-lg border border-white/10 bg-zinc-900/50 sm:h-44 sm:w-28">
+    <article className={`poster-tile-enter poster-tile-hover ${enterClass} rounded-xl border border-white/15 bg-zinc-950/55 p-3 flex flex-col`}>
+      <button className="block text-left active:opacity-75 transition-opacity" onClick={() => onOpenTitle(title)}>
+        <div className="h-40 w-28 overflow-hidden rounded-lg border border-white/10 bg-zinc-900/50 sm:h-44 sm:w-28">
           {poster ? (
             <img src={poster} alt={`${title.name} poster`} className="h-full w-full object-cover object-center" />
           ) : (
