@@ -34,10 +34,11 @@ new_sqlite_classes = ["DailyRateLimiter", "GroupRoomCoordinator"]
 # Running `npx wrangler deploy --env production` targets this.
 [env.production]
 name = "sententia-production"
+workers_dev = false
 
-# This forces production to ONLY map to your custom domain
+# Custom domain only — no path/wildcard (see Cloudflare custom_domains docs)
 routes = [
-  { pattern = "sententia.tv/*", custom_domain = true }
+  { pattern = "sententia.tv", custom_domain = true }
 ]
 
 # Production KV namespace (Ideally a separate production KV ID)
