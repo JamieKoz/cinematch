@@ -33,7 +33,7 @@ new_sqlite_classes = ["DailyRateLimiter", "GroupRoomCoordinator"]
 # --- PRODUCTION ENVIRONMENT ---
 # Running `npx wrangler deploy --env production` targets this.
 [env.production]
-name = "sententia-production"
+name = "sententia"
 workers_dev = false
 
 # Custom domain only — no path/wildcard (see Cloudflare custom_domains docs)
