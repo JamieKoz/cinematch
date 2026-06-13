@@ -33,7 +33,7 @@ new_sqlite_classes = ["DailyRateLimiter", "GroupRoomCoordinator"]
 [[d1_databases]]
 binding = "DB"
 database_name = "sententia-staging"
-database_id = "REPLACE_WITH_STAGING_D1_ID"
+database_id = "fff8b905-312d-40cc-ab1b-1d4200664164"
 migrations_dir = "migrations"
 
 # --- PRODUCTION ENVIRONMENT ---
@@ -68,5 +68,5 @@ new_sqlite_classes = ["DailyRateLimiter", "GroupRoomCoordinator"]
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "sententia"
-database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+database_id = "699d5c2b-963f-4a3c-ad17-06fe5b432918"
 migrations_dir = "migrations"
