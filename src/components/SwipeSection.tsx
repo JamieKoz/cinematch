@@ -61,7 +61,7 @@ export function SwipeSection(props: {
         <div className="mt-2 ml-16 flex items-center gap-3">
           <span
             key={deckCursor}
-            className="inline-block animate-pulse text-3xl font-bold tracking-tight text-zinc-100 transition-all duration-300"
+            className="inline-block animate-pulse text-xl font-bold tracking-tight text-zinc-100 transition-all duration-300"
           >
             {deckLength - deckCursor}
           </span>
@@ -72,7 +72,7 @@ export function SwipeSection(props: {
         </span>
       </div>
 
-      <div className="relative mt-3">
+      <div className="relative mt-1">
         {showBehindCard && nextSwipeTitle ? (
           <div className="pointer-events-none absolute inset-0 z-0 translate-y-2 scale-[0.97] overflow-hidden rounded-3xl opacity-25">
             <div className="relative h-full overflow-hidden rounded-3xl border border-white/10 bg-zinc-900/25 p-2 sm:p-4 shadow-xl backdrop-blur-xl">
@@ -143,7 +143,7 @@ export function SwipeSection(props: {
         <div className="flex items-center justify-center gap-4 sm:gap-10">
           <button
             aria-label="Pass"
-            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition hover:bg-rose-800/55 active:scale-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid h-14 w-14 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-rose-300/60 bg-rose-900/35 text-3xl sm:text-4xl text-rose-200 transition hover:bg-rose-800/55 active:scale-90 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => triggerButtonSwipe("pass")}
             disabled={swipeControlsDisabled}
           >
@@ -151,7 +151,7 @@ export function SwipeSection(props: {
           </button>
           <button
             aria-label="Keep"
-            className="grid h-16 w-16 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition hover:bg-emerald-800/60 active:scale-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid h-14 w-14 sm:h-20 sm:w-20 place-items-center rounded-full border-2 border-emerald-300/70 bg-emerald-900/45 text-3xl sm:text-4xl text-emerald-200 transition hover:bg-emerald-800/60 active:scale-90 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => triggerButtonSwipe("keep")}
             disabled={swipeControlsDisabled}
           >
