@@ -44,6 +44,7 @@ import type { SoloHistoryEntry } from "./services/storage";
 import { useSessionStore } from "./state/sessionStore";
 import { AuthPersistenceSync } from "./components/AuthPersistenceSync";
 import { useClerkEnabled } from "./components/ClerkAppShell";
+import { SignUpTastePromptModal } from "./components/SignUpTastePromptModal";
 import { TasteProfileCard } from "./components/TasteProfileCard";
 import { createInitialAnswers } from "./state/machine";
 
@@ -76,6 +77,7 @@ export function App() {
   const [groupHistory, setGroupHistory] = useState(() => loadGroupHistory());
   const recordedRoomCodesRef = useRef<Set<string>>(new Set());
   const [roomShareFeedback, setRoomShareFeedback] = useState<string | null>(null);
+  const [showSignUpTastePrompt, setShowSignUpTastePrompt] = useState(false);
 
   const {
     customYearStartPct,
@@ -301,6 +303,22 @@ export function App() {
     }
     markSoloHistoryFollowUpDone(followUpCandidate.id);
     setSoloHistory(loadSoloHistory());
+  }
+
+  function promptSignUpAfterRound() {
+    if (clerkEnabled) {
+      setShowSignUpTastePrompt(true);
+    }
+  }
+
+  function handlePickAnother() {
+    resetAndStartNewRound();
+    promptSignUpAfterRound();
+  }
+
+  function handleGroupStartAnotherRound() {
+    groupFlow.reset();
+    promptSignUpAfterRound();
   }
 
   function handleClearTasteSignal(type: "genre" | "mood" | "provider", key: string) {
@@ -712,7 +730,7 @@ export function App() {
               onSetSeenReaction={(reaction) => handleSeenIt(winner, reaction, "solo")}
               onWatchNow={handleWatchNow}
               onWatchTrailer={() => handleWatchTrailer(winner)}
-              onPickAnother={resetAndStartNewRound}
+              onPickAnother={handlePickAnother}
             />
           ) : null}
 
@@ -741,7 +759,7 @@ export function App() {
               onWatchNow={(title) => openWatchUrl(title, viewerPrefs.watchRegion)}
               onWatchTrailer={(title) => handleWatchTrailer(title)}
               onShowMore={(title) => setShowdownDetailsTitle(title)}
-              onStartAnotherRound={groupFlow.reset}
+              onStartAnotherRound={handleGroupStartAnotherRound}
             />
           ) : null}
 
@@ -758,6 +776,13 @@ export function App() {
           ) : null}
 
           {showdownDetailsTitle ? <ShowdownDetailsModal title={showdownDetailsTitle} onClose={() => setShowdownDetailsTitle(null)} /> : null}
+
+          {clerkEnabled ? (
+            <SignUpTastePromptModal
+              open={showSignUpTastePrompt && session.phase === "questions" && !showGroupFlow}
+              onClose={() => setShowSignUpTastePrompt(false)}
+            />
+          ) : null}
         </div>
       </main>
     </div>
