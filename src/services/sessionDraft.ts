@@ -33,12 +33,25 @@ export function buildSessionDraft(session: SessionState, catalog: Title[]): Sess
 }
 
 export function persistSessionDraftIfNeeded(session: SessionState, catalog: Title[]): void {
+  if (session.phase === "result") {
+    clearSessionDraft();
+    return;
+  }
+
   const draft = buildSessionDraft(session, catalog);
   if (draft) {
     saveSessionDraft(draft);
     return;
   }
-  clearSessionDraft();
+
+  // Keep a draft from a previous visit (new sessionId) so "Resume where you left off" works
+  // after reload. Clear only when this session intentionally returned to questions.
+  if (session.phase === "questions") {
+    const existing = loadSessionDraft();
+    if (existing && existing.session.sessionId === session.sessionId) {
+      clearSessionDraft();
+    }
+  }
 }
 
 export function hasResumableSessionDraft(): boolean {

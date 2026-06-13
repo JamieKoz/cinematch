@@ -1,6 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { SessionState, Title } from "../types";
-import { catalogForSessionDraft } from "./sessionDraft";
+import { catalogForSessionDraft, persistSessionDraftIfNeeded } from "./sessionDraft";
+import { loadSessionDraft } from "./storage";
+
+const storage = vi.hoisted(() => {
+  const map = new Map<string, string>();
+  return {
+    map,
+    clear: () => map.clear(),
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => map.set(key, value),
+    removeItem: (key: string) => map.delete(key)
+  };
+});
+
+vi.stubGlobal("window", {
+  localStorage: {
+    getItem: (key: string) => storage.getItem(key),
+    setItem: (key: string, value: string) => storage.setItem(key, value),
+    removeItem: (key: string) => storage.removeItem(key)
+  }
+});
+
+vi.mock("./persistenceBridge", () => ({
+  syncSessionDraftRemote: vi.fn(),
+  clearSessionDraftRemote: vi.fn()
+}));
 
 function title(id: string): Title {
   return {
@@ -63,5 +88,53 @@ describe("catalogForSessionDraft", () => {
       catalog
     );
     expect(picked.map((t) => t.id).sort()).toEqual(["b", "l", "r", "w"]);
+  });
+});
+
+describe("persistSessionDraftIfNeeded", () => {
+  beforeEach(() => {
+    storage.clear();
+  });
+
+  it("keeps an existing draft after reload when session returns to questions with a new id", () => {
+    const catalog = [title("a"), title("b")];
+    persistSessionDraftIfNeeded(session({ sessionId: "old-session" }), catalog);
+
+    persistSessionDraftIfNeeded(
+      session({ phase: "questions", sessionId: "new-session", deck: [], deckCursor: 0 }),
+      catalog
+    );
+
+    expect(loadSessionDraft()?.session.sessionId).toBe("old-session");
+  });
+
+  it("clears the draft when the same session returns to questions", () => {
+    const catalog = [title("a"), title("b")];
+    persistSessionDraftIfNeeded(session({ sessionId: "same-session" }), catalog);
+
+    persistSessionDraftIfNeeded(
+      session({ phase: "questions", sessionId: "same-session", deck: [], deckCursor: 0 }),
+      catalog
+    );
+
+    expect(loadSessionDraft()).toBeNull();
+  });
+
+  it("clears the draft when the session reaches result", () => {
+    const catalog = [title("a"), title("b")];
+    persistSessionDraftIfNeeded(session({ sessionId: "s1" }), catalog);
+
+    persistSessionDraftIfNeeded(
+      session({
+        phase: "result",
+        sessionId: "s1",
+        winnerId: "a",
+        backupId: "b",
+        showdownQueue: ["a", "b"]
+      }),
+      catalog
+    );
+
+    expect(loadSessionDraft()).toBeNull();
   });
 });

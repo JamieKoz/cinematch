@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { buildTitleSharePayload, isShareCancelled } from "../services/shareTitle";
 import type { Title } from "../types";
 
 export function useShareCurrentTitle(currentTitle?: Title) {
@@ -12,28 +13,28 @@ export function useShareCurrentTitle(currentTitle?: Title) {
 
   async function handleShareCurrentTitle() {
     if (!currentTitle) return;
-    const shareText = `${currentTitle.name} (${currentTitle.releaseYear})`;
-    const payload = {
-      title: "Sententia pick",
-      text: `Check out this pick: ${shareText}`
-    };
+    const payload = buildTitleSharePayload(currentTitle);
 
     try {
       if (typeof navigator !== "undefined" && "share" in navigator) {
-        await navigator.share(payload);
-        setShareFeedback("Shared");
-        return;
+        if (!navigator.canShare || navigator.canShare(payload)) {
+          await navigator.share(payload);
+          setShareFeedback("Shared");
+          return;
+        }
       }
-    } catch {
+    } catch (error) {
+      if (isShareCancelled(error)) return;
       // fall through to clipboard
     }
 
     try {
+      const clipboardText = payload.url ? `${payload.text}\n${payload.url}` : payload.text!;
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(payload.text);
+        await navigator.clipboard.writeText(clipboardText);
       } else {
         const textarea = document.createElement("textarea");
-        textarea.value = payload.text;
+        textarea.value = clipboardText;
         textarea.setAttribute("readonly", "true");
         textarea.style.position = "fixed";
         textarea.style.left = "-9999px";

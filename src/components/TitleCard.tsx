@@ -62,7 +62,7 @@ export function TitleCard({
         <p
           className={
             compactMobile
-              ? `mt-0.5 text-xs leading-snug text-zinc-100 sm:text-sm ${truncateOverview ? "line-clamp-2 sm:line-clamp-3" : ""}`
+              ? `mt-0.5 text-xs leading-snug text-zinc-100 sm:text-sm ${truncateOverview ? "" : ""}`
               : `mt-2 text-zinc-100 ${truncateOverview ? "line-clamp-3" : ""}`
           }
         >
