@@ -3,7 +3,8 @@ import { applyDecisionSignal, applyKeepSignal, applyPassSignal, createDefaultPro
 import { clearSessionDraft, loadSessionDraft } from "../services/storage";
 import { saveLastAnswers } from "../services/storage";
 import { trackEvent } from "../services/analytics";
-import { apiGateUserMessage } from "../services/apiErrors";
+import { AnalyticsEvents } from "../services/analyticsEvents";
+import { apiGateErrorReason, apiGateUserMessage } from "../services/apiErrors";
 import type { OnboardingAnswers, SessionState, TasteProfile } from "../types";
 import { cloneProfile, cloneSession, mergeCatalog } from "../utils/appState";
 import { sessionReducer } from "../state/sessionReducer";
@@ -11,6 +12,8 @@ import { buildRecommendationDeck } from "../services/deckBuilder";
 import { createInitialDeckBuildProgress, type DeckBuildProgress } from "../services/deckBuildProgress";
 import { nextPair } from "../state/machine";
 import { useSessionStore } from "../state/sessionStore";
+import type { DeckBuildErrorKind } from "../components/DeckBuildingOverlay";
+import { DAILY_LIMIT_USER_MESSAGE, fetchAiQuota, isAiQuotaExhausted } from "../services/aiQuota";
 
 export function useSessionFlow(params: {
   watchRegion: string;
@@ -20,18 +23,51 @@ export function useSessionFlow(params: {
 
   const [isBuildingDeck, setIsBuildingDeck] = useState(false);
   const [deckBuildError, setDeckBuildError] = useState<string | null>(null);
+  const [deckBuildErrorKind, setDeckBuildErrorKind] = useState<DeckBuildErrorKind>("generic");
   const [deckBuildProgress, setDeckBuildProgress] = useState<DeckBuildProgress | null>(null);
   const [lastSwipeSnapshot, setLastSwipeSnapshot] = useState<{ session: SessionState; profile: TasteProfile } | null>(null);
+
+  function setDeckBuildFailure(error: unknown) {
+    const reason = apiGateErrorReason(error);
+    const kind: DeckBuildErrorKind =
+      reason === "rate_limit" ? "rate_limit" : reason === "turnstile" ? "turnstile" : "generic";
+    setDeckBuildErrorKind(kind);
+    setDeckBuildError(
+      apiGateUserMessage(error) ?? (error instanceof Error ? error.message : "Could not build your deck. Try again.")
+    );
+    trackEvent(AnalyticsEvents.deckBuildError, {
+      reason: reason ?? "other",
+      watch_region: watchRegion
+    });
+    if (reason === "rate_limit") {
+      trackEvent(AnalyticsEvents.quotaLimitReached, { source: "deck_build" });
+    }
+  }
 
   async function startSwipeRound(overrideAnswers?: OnboardingAnswers) {
     const activeAnswers = overrideAnswers ?? session.answers;
     clearSessionDraft();
-    setIsBuildingDeck(true);
     setDeckBuildError(null);
-    setDeckBuildProgress(createInitialDeckBuildProgress());
+    setDeckBuildErrorKind("generic");
     setLastSwipeSnapshot(null);
     saveLastAnswers({ ...activeAnswers, quickModeId: undefined });
-    trackEvent("deck_build_start", {
+
+    const quota = await fetchAiQuota();
+    if (isAiQuotaExhausted(quota)) {
+      setDeckBuildError(DAILY_LIMIT_USER_MESSAGE);
+      setDeckBuildErrorKind("rate_limit");
+      trackEvent(AnalyticsEvents.quotaLimitReached, { source: "precheck" });
+      trackEvent(AnalyticsEvents.deckBuildError, {
+        reason: "rate_limit",
+        watch_region: watchRegion,
+        stage: "precheck"
+      });
+      return;
+    }
+
+    setIsBuildingDeck(true);
+    setDeckBuildProgress(createInitialDeckBuildProgress());
+    trackEvent(AnalyticsEvents.deckBuildStart, {
       watch_region: watchRegion
     });
 
@@ -53,11 +89,12 @@ export function useSessionFlow(params: {
         const withAnswers = sessionReducer(prev, { type: "UPDATE_ANSWERS", next: activeAnswers });
         return sessionReducer(withAnswers, { type: "DECK_READY", deck });
       });
+      trackEvent(AnalyticsEvents.deckBuildSuccess, {
+        watch_region: watchRegion,
+        deck_size: deck.length
+      });
     } catch (error) {
-      const gateMessage = apiGateUserMessage(error);
-      setDeckBuildError(
-        gateMessage ?? (error instanceof Error ? error.message : "Could not build your deck. Try again.")
-      );
+      setDeckBuildFailure(error);
     } finally {
       setIsBuildingDeck(false);
       setDeckBuildProgress(null);
@@ -66,6 +103,7 @@ export function useSessionFlow(params: {
 
   function clearDeckBuildError() {
     setDeckBuildError(null);
+    setDeckBuildErrorKind("generic");
     setDeckBuildProgress(null);
   }
 
@@ -126,6 +164,7 @@ export function useSessionFlow(params: {
   return {
     isBuildingDeck,
     deckBuildError,
+    deckBuildErrorKind,
     deckBuildProgress,
     clearDeckBuildError,
     canUndo: Boolean(lastSwipeSnapshot),

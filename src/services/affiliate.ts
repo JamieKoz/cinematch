@@ -1,5 +1,6 @@
 import { getWatchRegionOption, normalizeWatchRegion } from "../config/regions";
 import { trackEvent } from "./analytics";
+import { AnalyticsEvents } from "./analyticsEvents";
 
 /** @deprecated Use VITE_AMAZON_TAG_US — kept for existing deploys. */
 const LEGACY_AMAZON_TAG = (import.meta.env.VITE_AMAZON_ASSOCIATE_TAG ?? "").trim();
@@ -126,7 +127,7 @@ export function trackWatchClick(
   destination: WatchDestination,
   watchRegion: string
 ): void {
-  trackEvent("watch_now_click", {
+  trackEvent(AnalyticsEvents.watchNowClick, {
     destination,
     watch_region: normalizeWatchRegion(watchRegion),
     has_prime: title.providers.includes("prime"),
@@ -155,7 +156,7 @@ export function buildTrailerDeepLink(title: Pick<WatchLinkTitle, "name" | "relea
 }
 
 export function openTrailerUrl(title: Pick<WatchLinkTitle, "name" | "releaseYear" | "youtubeTrailerId">): void {
-  trackEvent("watch_trailer_click", {
+  trackEvent(AnalyticsEvents.watchTrailerClick, {
     title: title.name,
     year: title.releaseYear,
     has_video_id: Boolean(title.youtubeTrailerId)

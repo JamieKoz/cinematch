@@ -11,8 +11,11 @@ import { SwipeSection } from "./components/SwipeSection";
 import { applyWatchedSignal, createDefaultProfile } from "./engine/profile";
 import { useQuickSetup } from "./hooks/useQuickSetup";
 import { useShareCurrentTitle } from "./hooks/useShareCurrentTitle";
+import { useAiQuotaStatus } from "./hooks/useAiQuotaStatus";
 import { useGroupSessionFlow } from "./hooks/useGroupSessionFlow";
 import { useSessionFlow } from "./hooks/useSessionFlow";
+import { trackEvent } from "./services/analytics";
+import { AnalyticsEvents } from "./services/analyticsEvents";
 import { openTrailerUrl, openWatchUrl } from "./services/affiliate";
 import { loadBackendConfig } from "./services/backendConfig";
 import { buildWhyThisPick } from "./services/personalizationInsights";
@@ -93,6 +96,7 @@ export function App() {
   const {
     isBuildingDeck,
     deckBuildError,
+    deckBuildErrorKind,
     deckBuildProgress,
     clearDeckBuildError,
     canUndo,
@@ -162,6 +166,13 @@ export function App() {
   // Auto-save solo result when entering the result phase
   useEffect(() => {
     if (session.phase === "result" && winner && !showGroupFlow && typeof window !== "undefined") {
+      if (sessionResultTrackedRef.current !== winner.id) {
+        sessionResultTrackedRef.current = winner.id;
+        trackEvent(AnalyticsEvents.sessionResult, {
+          title_id: winner.id,
+          title_name: winner.name
+        });
+      }
       saveSoloResult({
         id: crypto.randomUUID?.() ?? `${Date.now()}`,
         winner,
@@ -290,6 +301,31 @@ export function App() {
   const hasLastAnswers = Object.keys(loadLastAnswers()).length > 0;
   const hasDraftSession = session.phase === "questions" && hasResumableSessionDraft();
   const showUtilityPage = showTastePanel || showLibraryPanel || showHistoryPanel;
+  const onLandingPage = session.phase === "questions" && !showGroupFlow && !showUtilityPage;
+  const { exhausted: aiQuotaExhausted, refresh: refreshAiQuota } = useAiQuotaStatus(onLandingPage);
+  const prevSessionPhaseRef = useRef(session.phase);
+  const sessionResultTrackedRef = useRef<string | null>(null);
+  const quotaBannerTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (!aiQuotaExhausted || quotaBannerTrackedRef.current) return;
+    quotaBannerTrackedRef.current = true;
+    trackEvent(AnalyticsEvents.quotaLimitReached, { source: "landing_banner" });
+  }, [aiQuotaExhausted]);
+
+  useEffect(() => {
+    const previousPhase = prevSessionPhaseRef.current;
+    if (previousPhase === "swipe" && (session.phase === "showdown" || session.phase === "result")) {
+      trackEvent(AnalyticsEvents.swipeDeckComplete, { end_phase: session.phase });
+    }
+    prevSessionPhaseRef.current = session.phase;
+  }, [session.phase]);
+
+  useEffect(() => {
+    if (session.phase === "swipe" || deckBuildErrorKind === "rate_limit") {
+      void refreshAiQuota();
+    }
+  }, [session.phase, deckBuildErrorKind, refreshAiQuota]);
 
   function handleStartFromLastTime() {
     const seeded = createInitialAnswers(loadLastAnswers());
@@ -312,6 +348,7 @@ export function App() {
   }
 
   function handlePickAnother() {
+    trackEvent(AnalyticsEvents.pickAnother);
     resetAndStartNewRound();
     promptSignUpAfterRound();
   }
@@ -587,8 +624,10 @@ export function App() {
               answers={session.answers}
               isBuildingDeck={isBuildingDeck || groupFlow.isBusy}
               deckBuildError={deckBuildError}
+              deckBuildErrorKind={deckBuildErrorKind}
               deckBuildProgress={deckBuildProgress}
               onDismissDeckBuildError={clearDeckBuildError}
+              aiQuotaExhausted={aiQuotaExhausted}
               customYearStartPct={customYearStartPct}
               customYearEndPct={customYearEndPct}
               onBegin={beginOnboarding}

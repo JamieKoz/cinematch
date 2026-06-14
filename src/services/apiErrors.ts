@@ -1,3 +1,5 @@
+import { DAILY_LIMIT_USER_MESSAGE } from "./quotaMessages";
+
 export class ApiGateError extends Error {
   readonly status: number;
   readonly code: "turnstile" | "rate_limit" | "unknown";
@@ -30,10 +32,16 @@ export async function throwIfApiGateError(response: Response): Promise<void> {
   throw new ApiGateError(message, response.status, code);
 }
 
+export function apiGateErrorReason(error: unknown): "rate_limit" | "turnstile" | "other" | null {
+  if (!(error instanceof ApiGateError)) return null;
+  if (error.code === "rate_limit" || error.code === "turnstile") return error.code;
+  return "other";
+}
+
 export function apiGateUserMessage(error: unknown): string | null {
   if (!(error instanceof ApiGateError)) return null;
   if (error.code === "rate_limit") {
-    return "You've reached your deck limit for today. Try again tomorrow.";
+    return DAILY_LIMIT_USER_MESSAGE;
   }
   if (error.code === "turnstile") {
     return "Security check failed. Refresh the page and try again.";

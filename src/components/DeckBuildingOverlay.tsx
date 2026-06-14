@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { THUMBNAIL_PATHS } from "../data/thumbnailManifest";
 import type { DeckBuildProgress } from "../services/deckBuildProgress";
 
@@ -12,21 +12,21 @@ const STATUS_LINES = [
   "Finalising picks — almost ready…"
 ];
 
+export type DeckBuildErrorKind = "rate_limit" | "turnstile" | "generic";
+
 export function DeckBuildingOverlay({
   error,
+  errorKind = "generic",
   progress,
   onDismiss
 }: {
   error?: string | null;
+  errorKind?: DeckBuildErrorKind;
   progress?: DeckBuildProgress | null;
   onDismiss?: () => void;
 }) {
   const [lineIndex, setLineIndex] = useState(0);
-  const stripImages = useMemo(() => {
-    const subset = THUMBNAIL_PATHS.slice(0, 18);
-    if (subset.length > 0) return subset;
-    return [];
-  }, []);
+  const stripImages = THUMBNAIL_PATHS.slice(0, 18);
 
   useEffect(() => {
     if (error) return;
@@ -39,19 +39,19 @@ export function DeckBuildingOverlay({
   const lockedInCount = Math.min(progress?.resolvedCount ?? 0, progress?.targetCount ?? 0);
   const lockedInTarget = progress?.targetCount ?? 0;
   const showLockedIn = lockedInCount > 0 && lockedInTarget > 0;
+  const isRateLimit = errorKind === "rate_limit";
 
   return (
     <div
       className="fixed inset-0 z-50 bg-black/62 backdrop-blur-md"
       role="status"
       aria-live="polite"
-      aria-busy="true"
+      aria-busy={!error}
     >
       {!error ? (
         <>
           <div className="deck-building-thumbnail-strip" aria-hidden="true">
             <div className="thumbnail-row">
-
               {showLockedIn ? (
                 <p
                   key={lockedInCount}
@@ -91,8 +91,19 @@ export function DeckBuildingOverlay({
       ) : (
         <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
           <div className="max-w-sm text-center">
-            <p className="text-base font-medium text-rose-100 sm:text-lg">Could not build your deck</p>
-            <p className="mt-2 text-sm text-zinc-300">{error}</p>
+            <p
+              className={
+                isRateLimit
+                  ? "text-base font-semibold text-amber-100 sm:text-lg"
+                  : "text-base font-medium text-rose-100 sm:text-lg"
+              }
+            >
+              {isRateLimit ? "Daily limit reached" : "Could not build your deck"}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-300">{error}</p>
+            {isRateLimit ? (
+              <p className="mt-3 text-xs text-zinc-400">Your limit resets at midnight UTC.</p>
+            ) : null}
             {onDismiss ? (
               <button
                 type="button"

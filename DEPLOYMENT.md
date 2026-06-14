@@ -70,3 +70,15 @@ npm run deploy:production
 ```
 
 Required Worker vars: `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` (and existing OpenAI/TMDB/Turnstile secrets as needed).
+
+## Analytics
+
+Product events are sent via `trackEvent` (see `src/services/analyticsEvents.ts`). To enable [Plausible](https://plausible.io) on production builds, set at build time:
+
+```bash
+VITE_PLAUSIBLE_DOMAIN=sententia.tv npm run deploy:production
+```
+
+Or add `VITE_PLAUSIBLE_DOMAIN=sententia.tv` to `.env.local` before deploying. Without this variable, events are still emitted locally but not forwarded to a dashboard.
+
+Key funnel events: `onboarding_begin`, `onboarding_review_reached`, `deck_build_start`, `deck_build_success`, `deck_build_error`, `swipe_deck_complete`, `session_result`, `pick_another`, `quota_limit_reached`.

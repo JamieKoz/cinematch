@@ -1,5 +1,7 @@
 import { SignUpButton, useAuth } from "@clerk/clerk-react";
 import { useEffect } from "react";
+import { trackEvent } from "../services/analytics";
+import { AnalyticsEvents } from "../services/analyticsEvents";
 
 export function SignUpTastePromptModal({
   open,
@@ -11,10 +13,20 @@ export function SignUpTastePromptModal({
   const { isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
+    if (!open || !isLoaded || isSignedIn) return;
+    trackEvent(AnalyticsEvents.signUpPromptShown);
+  }, [open, isLoaded, isSignedIn]);
+
+  useEffect(() => {
     if (isLoaded && isSignedIn) {
       onClose();
     }
   }, [isLoaded, isSignedIn, onClose]);
+
+  function dismiss() {
+    trackEvent(AnalyticsEvents.signUpPromptDismissed);
+    onClose();
+  }
 
   if (!open || !isLoaded || isSignedIn) {
     return null;
@@ -23,7 +35,7 @@ export function SignUpTastePromptModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4"
-      onClick={onClose}
+      onClick={dismiss}
     >
       <div
         className="w-full max-w-md rounded-2xl border border-violet-300/25 bg-zinc-950/95 p-5 shadow-2xl backdrop-blur"
@@ -52,7 +64,7 @@ export function SignUpTastePromptModal({
           <button
             type="button"
             className="rounded-full border border-white/25 bg-zinc-900/60 px-4 py-2 text-sm text-zinc-100 transition hover:bg-zinc-800/75 active:scale-95"
-            onClick={onClose}
+            onClick={dismiss}
           >
             Maybe later
           </button>

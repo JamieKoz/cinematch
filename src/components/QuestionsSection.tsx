@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { DeckBuildingOverlay } from "./DeckBuildingOverlay";
+import { DeckBuildingOverlay, type DeckBuildErrorKind } from "./DeckBuildingOverlay";
+import { DailyLimitNotice } from "./DailyLimitNotice";
 import type { DeckBuildProgress } from "../services/deckBuildProgress";
+import { trackEvent } from "../services/analytics";
+import { AnalyticsEvents } from "../services/analyticsEvents";
 import { AvoidTonightPicker } from "./AvoidTonightPicker";
 import { DiscoveryAudiencePicker, DiscoveryPopularityPicker } from "./DiscoveryStylePicker";
 import { LanguageMultiSelect } from "./LanguageMultiSelect";
@@ -140,8 +143,10 @@ export function QuestionsSection(props: {
   answers: OnboardingAnswers;
   isBuildingDeck: boolean;
   deckBuildError?: string | null;
+  deckBuildErrorKind?: DeckBuildErrorKind;
   deckBuildProgress?: DeckBuildProgress | null;
   onDismissDeckBuildError?: () => void;
+  aiQuotaExhausted?: boolean;
   customYearStartPct: number;
   customYearEndPct: number;
   onBegin: () => void;
@@ -171,8 +176,10 @@ export function QuestionsSection(props: {
     answers,
     isBuildingDeck,
     deckBuildError,
+    deckBuildErrorKind,
     deckBuildProgress,
     onDismissDeckBuildError,
+    aiQuotaExhausted = false,
     customYearStartPct,
     customYearEndPct,
     onBegin,
@@ -206,6 +213,7 @@ export function QuestionsSection(props: {
   function goNext() {
     if (step === "welcome") {
       onBegin();
+      trackEvent(AnalyticsEvents.onboardingBegin);
     }
     if (step === "vibe" && !answers.quickModeId) {
       applyNoPreference();
@@ -214,6 +222,9 @@ export function QuestionsSection(props: {
       commitKeywords(keywordsDraft);
     }
     const next = nextStep(step);
+    if (next === "review") {
+      trackEvent(AnalyticsEvents.onboardingReviewReached);
+    }
     if (next) goTo(next);
   }
 
@@ -258,6 +269,9 @@ export function QuestionsSection(props: {
 
   async function handleStart() {
     commitKeywords(keywordsDraft);
+    if (watchMode === "solo" && aiQuotaExhausted) {
+      return;
+    }
     if (watchMode === "solo") {
       onStartSolo();
       return;
@@ -315,9 +329,12 @@ export function QuestionsSection(props: {
                   </div>
                 </div>
               ) : null}
+              {aiQuotaExhausted ? <DailyLimitNotice className="mt-6 max-w-md" /> : null}
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 {hasLastAnswers && onStartFromLastTime ? (
-                  <NavButton onClick={onStartFromLastTime}>Repeat previous</NavButton>
+                  <NavButton onClick={onStartFromLastTime} disabled={aiQuotaExhausted}>
+                    Repeat previous
+                  </NavButton>
                 ) : null}
                 {hasDraftSession && onResumeSession ? (
                   <NavButton onClick={onResumeSession}>Resume where you left off</NavButton>
@@ -601,6 +618,7 @@ export function QuestionsSection(props: {
                 </button>
               </div>
               <OnboardingSummary answers={answers} watchRegion={viewerPrefs.watchRegion} />
+              {aiQuotaExhausted ? <DailyLimitNotice className="mt-4 w-full max-w-lg text-left" /> : null}
               <div className="onboarding-nav flex items-center justify-center gap-3">
                 <NavButton onClick={goBack}>Back</NavButton>
                 <NavButton
@@ -608,7 +626,7 @@ export function QuestionsSection(props: {
                   onClick={() => {
                     void handleStart();
                   }}
-                  disabled={isBuildingDeck}
+                  disabled={isBuildingDeck || (watchMode === "solo" && aiQuotaExhausted)}
                 >
                   {isBuildingDeck ? "Loading…" : watchMode === "group" ? "Create room" : "Start swiping"}
                 </NavButton>
@@ -621,6 +639,7 @@ export function QuestionsSection(props: {
       {isBuildingDeck || deckBuildError ? (
         <DeckBuildingOverlay
           error={deckBuildError}
+          errorKind={deckBuildErrorKind}
           progress={deckBuildProgress}
           onDismiss={onDismissDeckBuildError}
         />

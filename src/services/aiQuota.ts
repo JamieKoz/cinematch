@@ -1,8 +1,11 @@
 import { ApiGateError } from "./apiErrors";
 import { loadBackendConfig } from "./backendConfig";
+import { DAILY_LIMIT_USER_MESSAGE } from "./quotaMessages";
 
 /** One generate call fills a 10-card deck. */
 export const AI_REQUESTS_PER_DECK = 1;
+
+export { DAILY_LIMIT_USER_MESSAGE };
 
 export type AiQuota = {
   count: number;
@@ -36,8 +39,12 @@ export async function fetchAiQuota(): Promise<AiQuota | null> {
   };
 }
 
+export function isAiQuotaExhausted(quota: AiQuota | null): boolean {
+  if (!quota?.limited) return false;
+  return quota.remaining < AI_REQUESTS_PER_DECK;
+}
+
 export function assertCanBuildAiDeck(quota: AiQuota | null): void {
-  if (!quota?.limited) return;
-  if (quota.remaining >= AI_REQUESTS_PER_DECK) return;
+  if (!isAiQuotaExhausted(quota)) return;
   throw new ApiGateError("Daily deck limit reached", 429, "rate_limit");
 }

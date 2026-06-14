@@ -2,9 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   AI_REQUESTS_PER_DECK,
   assertCanBuildAiDeck,
+  isAiQuotaExhausted,
   type AiQuota
 } from "./aiQuota";
 import { ApiGateError } from "./apiErrors";
+
+describe("isAiQuotaExhausted", () => {
+  it("returns false when quota is not tracked", () => {
+    expect(isAiQuotaExhausted(null)).toBe(false);
+    expect(isAiQuotaExhausted({ count: 30, limit: 30, remaining: 0, limited: false })).toBe(false);
+  });
+
+  it("returns true when no deck builds remain", () => {
+    expect(isAiQuotaExhausted({ count: 30, limit: 30, remaining: 0, limited: true })).toBe(true);
+  });
+});
 
 describe("assertCanBuildAiDeck", () => {
   it("allows builds when quota is not tracked", () => {

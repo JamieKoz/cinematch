@@ -20,11 +20,25 @@ function publishableKeyFromImportMeta(): string | null {
   return null;
 }
 
+function isClerkSupportedOrigin(): boolean {
+  if (typeof window === "undefined") return true;
+  const { hostname } = window.location;
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+  // Clerk rejects raw IP origins; skip auth when previewing over LAN in dev.
+  if (import.meta.env.DEV && /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return false;
+  return true;
+}
+
+function resolvePublishableKey(): string | null {
+  if (!isClerkSupportedOrigin()) return null;
+  return publishableKeyFromImportMeta();
+}
+
 export function ClerkAppShell({ children }: { children: ReactNode }) {
-  const [publishableKey, setPublishableKey] = useState<string | null>(publishableKeyFromImportMeta);
+  const [publishableKey, setPublishableKey] = useState<string | null>(resolvePublishableKey);
 
   useEffect(() => {
-    if (publishableKey) return;
+    if (publishableKey || !isClerkSupportedOrigin()) return;
     void loadBackendConfig().then((config) => {
       if (config.clerkPublishableKey) {
         setPublishableKey(config.clerkPublishableKey);
